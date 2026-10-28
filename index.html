@@ -366,6 +366,7 @@ function renderFocus() {
   renderBoard();
 }
 
+const nd = (s) => s.n + (s.days ? ` · ${s.days}일` : '');
 function renderBoard() {
   const mx = D.report?.matrix || {};
   const rows = Object.keys(PROV).map((p) => ({ p, s: mx[p]?.[SEL]?.[FHZ] })).sort((a, b) => (b.s?.hit ?? -1) - (a.s?.hit ?? -1));
@@ -373,8 +374,8 @@ function renderBoard() {
   $('b-sub').textContent = `${NAMES[SEL]} · ${FHZ === '1h' ? '1시간' : '종가'}`;
   $('board').innerHTML = rows.map(({ p, s }) => `<div class="row"><span class="who"><span class="sw" style="background:${PC[p]}"></span>${PROV[p]}</span>
     <span class="track2"><i style="background:${PC[p]}" data-w="${s?.n ? s.hit * 100 : 0}"></i><span class="half"></span></span>
-    <span class="v num">${s?.n ? `<b>${pct(s.hit)}</b> <span class="vmeta">${s.n}</span>` : '<span class="vmeta">–</span>'}</span></div>`).join('')
-    + `<div class="row" style="border-top:1px dashed var(--line);padding-top:8px"><span class="who">전체</span><span class="track2"><i style="background:var(--accent)" data-w="${pooled?.n ? pooled.hit * 100 : 0}"></i><span class="half"></span></span><span class="v num">${pooled?.n ? `<b>${pct(pooled.hit)}</b> <span class="vmeta">${pooled.n}</span>` : '<span class="vmeta">–</span>'}</span></div>`
+    <span class="v num">${s?.n ? `<b>${pct(s.hit)}</b> <span class="vmeta">${nd(s)}</span>` : '<span class="vmeta">–</span>'}</span></div>`).join('')
+    + `<div class="row" style="border-top:1px dashed var(--line);padding-top:8px"><span class="who">전체</span><span class="track2"><i style="background:var(--accent)" data-w="${pooled?.n ? pooled.hit * 100 : 0}"></i><span class="half"></span></span><span class="v num">${pooled?.n ? `<b>${pct(pooled.hit)}</b> <span class="vmeta">${nd(pooled)}</span>` : '<span class="vmeta">–</span>'}</span></div>`
     + `<div class="row"><span class="who vmeta">항상 ▲</span><span class="track2"><i style="background:var(--wait)" data-w="${pooled?.n ? pooled.always_up_hit * 100 : 0}"></i><span class="half"></span></span><span class="v num vmeta">${pooled?.n ? pct(pooled.always_up_hit) : '–'}</span></div>`;
   requestAnimationFrame(() => requestAnimationFrame(() => $('board').querySelectorAll('i[data-w]').forEach((i) => { i.style.width = i.dataset.w + '%'; })));
 }
@@ -438,7 +439,7 @@ function renderScripts() {
       <span class="hd"><span class="id">${esc(s.id)}</span><span class="badge">${og(s.author)}${s.status !== 'active' ? ' · 퇴출' : ''}</span></span>
       <span class="ds">${esc(s.description)}</span>
       <span class="rec"><svg width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r="13" fill="none" stroke="var(--sunk)" stroke-width="4"/><circle class="fg" cx="17" cy="17" r="13" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-off="${C * (1 - frac)}" transform="rotate(-90 17 17)" style="transition:stroke-dashoffset 1s ease"/></svg>
-        <span><b class="num">${r?.n ? pct(r.hit) : '–'}</b> <span class="vmeta num">${r?.n ? 'n=' + r.n : '채점 대기'}</span></span></span>
+        <span><b class="num">${r?.n ? pct(r.hit) : '–'}</b> <span class="vmeta num">${r?.n ? 'n=' + nd(r) : '채점 대기'}</span></span></span>
       <span class="pu">${pu}</span></button>`;
   }).join('') || '<div class="empty">–</div>';
   $('scripts').querySelectorAll('.sc').forEach((b) => { b.onclick = () => { SSEL = SSEL === b.dataset.id ? null : b.dataset.id; const s = S.find((x) => x.id === SSEL); $('code').hidden = !s; if (s) $('code').textContent = s.code.trim(); $('scripts').querySelectorAll('.sc').forEach((x) => x.setAttribute('aria-pressed', x.dataset.id === SSEL)); }; });
