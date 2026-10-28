@@ -217,7 +217,7 @@ function addCandidate(label, url, origin) {
 async function scout(ctx, strategy) {
   const inUse = new Set(strategy.sources.map((s) => s.url.replace(/\/+$/, '')));
   const c = loadCandidates();
-  const pick = c.filter((x) => !inUse.has(x.url.replace(/\/+$/, '')) && x.tries < 6)
+  const pick = c.filter((x) => !inUse.has(x.url.replace(/\/+$/, '')) && x.tries < 6 && !x.dead && !(x.tries >= 2 && !x.ok))
     .sort((a, b) => a.tries - b.tries || (a.last_at || '').localeCompare(b.last_at || ''))[0];
   if (!pick) return null;
   const res = { label: pick.label, url: pick.url, at: now.toISOString() };
@@ -225,6 +225,7 @@ async function scout(ctx, strategy) {
     const r = await readPage(ctx, pick.url, { max: 1500, wait: 4000 });
     Object.assign(res, { ok: r.text.length >= 200, chars: r.text.length, title: r.title, sample: r.text.slice(0, 240) });
   } catch (e) { Object.assign(res, { ok: false, chars: 0, why: e.message.slice(0, 100) }); }
+  if (/^(404|not found|page not found)\b/i.test(res.title || '') || /ERR_NAME_NOT_RESOLVED/.test(res.why || '')) pick.dead = true;
   pick.tries++; pick.last_at = res.at; pick.last_ok = res.ok;
   if (res.ok) { pick.ok++; pick.chars += res.chars; }
   writeJson('candidates.json', c);
@@ -388,7 +389,7 @@ function buildPrompt(s, m, strategy, signals, scriptBoard) {
     lines.push(``, `Signal scripts (p_up per asset from quantitative scripts that run every hour; track record = scored hit rate so far):`);
     for (const [id, sig] of Object.entries(signals)) {
       const b = scriptBoard[id] || {};
-      const tr = ['h1', 'close'].map((hz) => b[hz]?.n ? `${hz} ${Math.round(b[hz].hit * 100)}% of ${b[hz].n}` : `${hz} unscored`).join(', ');
+      const tr = ['h1', 'close'].map((hz) => b[hz]?.n ? `${hz} ${Math.round(b[hz].hit * 100)}% of ${b[hz].n}${b[hz].days ? ` over ${b[hz].days} target day(s)` : ''}` : `${hz} unscored`).join(', ');
       lines.push(`- ${id} [${tr}]: ${Object.entries(sig).map(([k, v]) => `${k} ${Object.entries(v).map(([hz, p]) => `${hz}=${p.toFixed(2)}`).join('/')}`).join('; ')}`);
     }
   }
@@ -396,9 +397,9 @@ function buildPrompt(s, m, strategy, signals, scriptBoard) {
   lines.push(`For EACH asset key (${ASSETS.map((a) => a.key).join(', ')}) predict:`);
   lines.push(`- "1h": will the 1h instrument be HIGHER or LOWER exactly 60 minutes from now than its last price shown?`);
   lines.push(`- "close": will the NEXT regular-session close of the daily symbol (the first close after the current time) be HIGHER or LOWER than the last close shown?`);
-  lines.push(``, `You can run code before answering. If you want to, reply with ONLY {"run_script":{"code":"<function body>"}} and you will receive its output in this chat, then give the prediction JSON. At most one script run.`);
+  lines.push(``, `You can run code before answering. If you want to, reply with ONLY {"run_script":{"code":"<function body>"}} inside a \`\`\`json code block and you will receive its output in this chat, then give the prediction JSON. At most one script run.`);
   lines.push(SCRIPT_API);
-  lines.push(``, `Final answer: reply with ONLY this JSON, nothing else:`);
+  lines.push(``, `Final answer: reply with ONLY this JSON inside a single \`\`\`json code block (the block keeps characters like * intact), nothing else:`);
   lines.push(`{"spx":{"1h":{"dir":"up|down","p_up":0.00},"close":{"dir":"up|down","p_up":0.00}},"ndx":{...},"tlt":{...},"boil":{...},"kospi":{...},"reason":"one or two short sentences","suggest_source":{"label":"...","url":"https://..."},"new_script":{"id":"snake_case_name","description":"one sentence","code":"<function body returning {spx:{h1:p_up,close:p_up},...}>"}}`);
   lines.push(`p_up is your probability (0 to 1) that the price ends higher; dir must agree with p_up. suggest_source (optional): one public web page not listed above that would most improve these predictions. new_script (optional): a persistent signal script that will run every hour and be scored like you; propose one only if you believe it adds information the existing scripts lack.`);
   return lines.join('\n');
@@ -418,20 +419,53 @@ function ask(provider, prompt, { timeout_s = 240, chat_id } = {}) {
   });
 }
 
-function firstJson(text) {
-  const t = String(text);
+function cooled(p, preds) {
+  const mine = preds.filter((x) => x.provider === p).slice(-2);
+  return mine.length === 2 && mine.every((x) => x.error) && now.getTime() - new Date(mine[1].at).getTime() < 6 * 3600_000;
+}
+
+function pickProvider(start, exclude = []) {
+  const preds = readJsonl('preds.jsonl');
+  for (let k = 0; k < PROVIDERS.length; k++) { const p = PROVIDERS[(start + k) % PROVIDERS.length]; if (!exclude.includes(p) && !cooled(p, preds)) return p; }
+  return null;
+}
+
+async function repairAsk(rec) {
+  if (!rec.chat_id) return null;
+  const t0 = Date.now();
+  try {
+    const r = await ask(rec.provider, 'Your reply could not be parsed as JSON. Reply again with ONLY the complete prediction JSON in the format given earlier, inside a ```json code block.', { chat_id: rec.chat_id, timeout_s: 180 });
+    const p = parseAnswer(r.answer);
+    rec.repair = { ok: !!p, ms: Date.now() - t0, answer: String(r.answer).slice(0, 4000) };
+    return p;
+  } catch (e) { rec.repair = { ok: false, ms: Date.now() - t0, error: String(e.message).slice(0, 200) }; return null; }
+}
+
+function jsonIn(t) {
   const start = t.indexOf('{');
   if (start < 0) return null;
   for (let end = t.lastIndexOf('}'); end > start; end = t.lastIndexOf('}', end - 1)) {
     try { return JSON.parse(t.slice(start, end + 1)); } catch {}
   }
+  for (const tail of ['}', '}}', '"}}', '"}}}']) { try { return JSON.parse(t.slice(start).trimEnd() + tail); } catch {} }
   return null;
+}
+
+function firstJson(text) {
+  const t = String(text);
+  for (const s of [...[...t.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((x) => x[1]), t]) { const j = jsonIn(s); if (j) return j; }
+  return null;
+}
+
+function normCode(code) {
+  const s = String(code).trim().replace(/^```(?:javascript|js)?\s*\n?/, '').replace(/\n?```$/, '').trim();
+  return /^(async\s+)?function\b[^(]*\(|^\(\s*data\b[^)]*\)\s*=>|^data\s*=>/.test(s) ? `return (${s})(data, lib);` : s;
 }
 
 function scriptRequest(text) {
   const j = firstJson(text);
-  if (j?.run_script?.code && typeof j.run_script.code === 'string') return j.run_script.code.slice(0, 12000);
-  if (/run_script/.test(text)) { const m = String(text).match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/); if (m) return m[1].slice(0, 12000); }
+  if (j?.run_script?.code && typeof j.run_script.code === 'string') return normCode(j.run_script.code.slice(0, 12000));
+  if (/run_script/.test(text)) { const m = String(text).match(/```(?:javascript|js)\s*\n([\s\S]*?)```/); if (m) return normCode(m[1].slice(0, 12000)); }
   return null;
 }
 
@@ -453,7 +487,7 @@ function parseAnswer(text) {
     if (h1 || close) out.assets[a.key] = { h1, close };
   }
   if (j.suggest_source?.url) out.suggest_source = { label: String(j.suggest_source.label || '').slice(0, 60), url: String(j.suggest_source.url).slice(0, 300) };
-  if (j.new_script?.code && typeof j.new_script.code === 'string') out.new_script = { id: String(j.new_script.id || 'script').replace(/[^a-z0-9_]/gi, '_').slice(0, 40).toLowerCase(), description: String(j.new_script.description || '').slice(0, 300), code: j.new_script.code.slice(0, 12000) };
+  if (j.new_script?.code && typeof j.new_script.code === 'string') out.new_script = { id: String(j.new_script.id || 'script').replace(/[^a-z0-9_]/gi, '_').slice(0, 40).toLowerCase(), description: String(j.new_script.description || '').slice(0, 300), code: normCode(j.new_script.code.slice(0, 12000)) };
   return Object.keys(out.assets).length ? out : null;
 }
 
@@ -483,6 +517,18 @@ function outcomes(pr, a, b) {
   return res;
 }
 
+function reparse() {
+  const preds = readJsonl('preds.jsonl');
+  let n = 0;
+  for (const p of preds) {
+    if (p.parsed || p.error || !p.answer) continue;
+    const q = parseAnswer(p.answer);
+    if (q) { delete q.new_script; delete q.suggest_source; p.parsed = q; p.reparsed_at = now.toISOString(); n++; }
+  }
+  if (n) fs.writeFileSync(P('preds.jsonl'), preds.map((p) => JSON.stringify(p)).join('\n') + '\n');
+  return n;
+}
+
 function score(m) {
   const preds = readJsonl('preds.jsonl');
   const done = new Set(readJsonl('scores.jsonl').map((s) => `${s.id}:${s.script || ''}:${s.asset}:${s.horizon}`));
@@ -504,7 +550,7 @@ function score(m) {
           done.add(key);
           const rec = { ...base, ...extra };
           if (o.status !== 'scored') rec.status = o.status;
-          else Object.assign(rec, { status: 'scored', base: o.base, target: o.target, target_at: o.target_at || o.target_date, target_date: o.target_date, outcome_up: o.outcome_up, dir, p_up: p, hit: (dir === 'up') === o.outcome_up, momentum_hit: o.momentum_hit });
+          else Object.assign(rec, { status: 'scored', base: o.base, target: o.target, target_at: o.target_at || o.target_date, base_date: o.base_date, target_date: o.target_date, outcome_up: o.outcome_up, dir, p_up: p, hit: (dir === 'up') === o.outcome_up, momentum_hit: o.momentum_hit });
           appendJsonl('scores.jsonl', rec); n++;
         };
         if (pa?.[hz]) emit({ provider: pr.provider }, pa[hz].dir, pa[hz].p_up);
@@ -536,6 +582,8 @@ function summarize(rows) {
   const mom = rows.filter((r) => r.momentum_hit != null);
   const o = { n: rows.length, hit: +hit.toFixed(3), brier: +brier.toFixed(4), always_up_hit: +upRate.toFixed(3) };
   if (mom.length) o.momentum_hit = +(mom.filter((r) => r.momentum_hit).length / mom.length).toFixed(3);
+  const days = new Set(rows.filter((r) => r.horizon === 'close').map((r) => r.target_date)).size;
+  if (days) o.days = days;
   return o;
 }
 
@@ -666,11 +714,13 @@ async function runPhases() {
     writeJson('work/m.json', m);
     writeJson('last_m.json', m);
     archiveNews(m);
+    const rp = reparse();
+    if (rp) log('reparsed', rp);
     log('scored', score(m), 'scouted', m.scouted ? `${m.scouted.label} ok=${m.scouted.ok} chars=${m.scouted.chars}` : '-');
     if (process.env.SNP_SKIP_ASK === '1') { exportPublic(report(), m); clearWork(); return 0; }
     const st = readJson('state.json', { next: 0, evolve_next: 0 });
-    const provider = PROVIDERS[st.next % PROVIDERS.length];
-    writeJson('state.json', { ...st, next: st.next + 1 });
+    const provider = pickProvider(st.next) || PROVIDERS[st.next % PROVIDERS.length];
+    writeJson('state.json', { ...st, next: PROVIDERS.indexOf(provider) + 1 });
     const scripts = activeScripts();
     setPhase({ step: 'predict', provider });
     if (scripts.length) { queueSandbox(m, scripts.map((s) => ({ id: s.id, code: s.code }))); return SANDBOX; }
@@ -701,8 +751,19 @@ async function runPhases() {
         return SANDBOX;
       }
       rec.answer = String(r.answer).slice(0, 4000);
-      rec.parsed = parseAnswer(r.answer);
-    } catch (e) { Object.assign(rec, { error: String(e.message).slice(0, 300), parsed: null, ms: Date.now() - t0 }); }
+      rec.parsed = parseAnswer(r.answer) || await repairAsk(rec);
+    } catch (e) {
+      Object.assign(rec, { error: String(e.message).slice(0, 300), parsed: null, ms: Date.now() - t0 });
+      const tried = [...(ph.tried || []), ph.provider];
+      const fb = tried.length < 2 ? pickProvider(PROVIDERS.indexOf(ph.provider) + 1, tried) : null;
+      if (fb) {
+        appendJsonl('preds.jsonl', rec);
+        log('asked', rec.provider, 'FAILED', rec.error.replace(/\s+/g, ' ').slice(0, 120), '-> fallback', fb);
+        writeJson('state.json', { ...readJson('state.json', {}), next: PROVIDERS.indexOf(fb) + 1 });
+        setPhase({ step: 'predict', provider: fb, tried });
+        return runPhases();
+      }
+    }
     return finalize(rec, m);
   }
   if (ph.step === 'followup') {
@@ -712,10 +773,10 @@ async function runPhases() {
     const out = r0.ok ? JSON.stringify(r0.result).slice(0, 6000) : `ERROR: ${r0.error}`;
     const t0 = Date.now();
     try {
-      const r = await ask(ph.provider, `Script output:\n${out}\n\nNow reply with ONLY the final prediction JSON in the format given earlier (no further script runs).`, { chat_id: rec.chat_id });
+      const r = await ask(ph.provider, `Script output:\n${out}\n\nNow reply with ONLY the final prediction JSON in the format given earlier, inside a \`\`\`json code block (no further script runs).`, { chat_id: rec.chat_id });
       rec.ms += Date.now() - t0;
       rec.answer = String(r.answer).slice(0, 4000);
-      rec.parsed = parseAnswer(r.answer);
+      rec.parsed = parseAnswer(r.answer) || await repairAsk(rec);
     } catch (e) { Object.assign(rec, { error: String(e.message).slice(0, 300), parsed: null }); }
     return finalize(rec, m);
   }
@@ -724,7 +785,10 @@ async function runPhases() {
     const r0 = sandboxResults().candidate;
     const sig = r0?.ok ? signalOf(r0.result) : null;
     if (sig) { rec.new_script_id = addScript(rec.parsed.new_script, `suggest:${rec.provider}`); rec.new_script_ok = true; }
-    else { rec.new_script_id = rec.parsed.new_script.id; rec.new_script_ok = false; rec.new_script_why = r0?.error || 'output had no valid p_up values'; }
+    else {
+      rec.new_script_id = rec.parsed.new_script.id; rec.new_script_ok = false; rec.new_script_why = r0?.error || 'output had no valid p_up values';
+      appendJsonl('script_events.jsonl', { at: now.toISOString(), event: 'rejected', id: rec.new_script_id, author: `suggest:${rec.provider}`, why: rec.new_script_why, output: r0?.ok ? JSON.stringify(r0.result).slice(0, 300) : undefined, code: rec.parsed.new_script.code.slice(0, 3000) });
+    }
     return finalize(rec, m, true);
   }
   log('unknown phase', JSON.stringify(ph)); clearWork(); return 0;
@@ -752,8 +816,9 @@ async function evolvePhases() {
     const sb = sandboxResults();
     const added = [];
     const rejected = [];
-    for (const s of pend.add) { const r = sb[`add_${s.id}`]; if (r?.ok && signalOf(r.result)) added.push(addScript(s, `evolve:${pend.provider}`)); else rejected.push({ id: s.id, why: r?.error || 'no valid p_up' }); }
+    for (const s of pend.add) { const r = sb[`add_${s.id}`]; if (r?.ok && signalOf(r.result)) added.push(addScript(s, `evolve:${pend.provider}`)); else rejected.push({ id: s.id, why: r?.error || 'no valid p_up', output: r?.ok ? JSON.stringify(r.result).slice(0, 300) : undefined, code: s.code.slice(0, 3000) }); }
     appendJsonl('script_events.jsonl', { at: now.toISOString(), event: 'evolve', provider: pend.provider, added, rejected, retired: pend.retired });
+    rejected.forEach((x) => { delete x.code; delete x.output; });
     if (pend.entry) { pend.entry.scripts = { added, rejected, retired: pend.retired }; appendJsonl('evolutions.jsonl', pend.entry); }
     exportPublic(report(), null);
     clearWork();
@@ -766,8 +831,8 @@ async function evolvePhases() {
     .map((s) => ({ at: s.at.slice(0, 16), asset: s.asset, horizon: s.horizon, provider: s.provider, v: s.strategy_version, dir: s.dir, p_up: s.p_up, outcome: s.outcome_up ? 'up' : 'down', hit: s.hit, reason: preds[s.id]?.parsed?.reason }));
   if (recent.length < 10) { log('evolve: too few scored predictions', recent.length); appendJsonl('evolutions.jsonl', { at: now.toISOString(), adopted: false, why: `only ${recent.length} scored predictions` }); exportPublic(rep, null); return 0; }
   const st = readJson('state.json', { next: 0, evolve_next: 0 });
-  const provider = PROVIDERS[(st.evolve_next || 0) % PROVIDERS.length];
-  writeJson('state.json', { ...st, evolve_next: (st.evolve_next || 0) + 1 });
+  const provider = pickProvider(st.evolve_next || 0) || PROVIDERS[(st.evolve_next || 0) % PROVIDERS.length];
+  writeJson('state.json', { ...st, evolve_next: PROVIDERS.indexOf(provider) + 1 });
   const scripts = activeScripts();
   const prompt = [
     `You maintain an automated system that predicts, every hour, the 1-hour-ahead direction and the next-close direction of five markets: ${ASSETS.map((a) => `${a.key} = ${a.name}`).join('; ')}. Each hour a browser reads the pages and Google News queries in the playbook, quantitative signal scripts run in a sandbox, and an LLM predicts using all of it plus the playbook guidance. Improve accuracy by revising the playbook AND the signal scripts.`,
@@ -789,7 +854,7 @@ async function evolvePhases() {
     `Most recent scored LLM predictions with the predictor's stated reason:`, ...recent.map((r) => JSON.stringify(r)),
     ``,
     `Rules: sources must be public web pages (no login, no paywall) with market-relevant text for these five markets; at most 7 sources and 6 news queries; articles_per_query 1-2; guidance at most 1000 characters, concrete and testable, can be per-asset, can tell the predictor how to weigh specific scripts. Retire scripts only with enough scored evidence; add at most 2 scripts. Do not overfit to a handful of outcomes.`,
-    `Reply with ONLY this JSON:`,
+    `Reply with ONLY this JSON inside a single \`\`\`json code block:`,
     `{"sources":[{"label":"...","url":"https://...","max":1200}],"queries":["..."],"articles_per_query":1,"guidance":"...","changelog":"what you changed and why, one or two sentences","new_candidates":[{"label":"...","url":"https://..."}],"scripts":{"add":[{"id":"snake_case","description":"...","code":"<function body>"}],"retire":["script_id"]}}`,
   ].join('\n');
   let prop;
@@ -830,7 +895,7 @@ async function evolvePhases() {
   for (const s of all) if (s.status === 'active' && retireIds.includes(s.id)) { s.status = 'retired'; s.retired_at = now.toISOString(); s.retired_why = `evolve:${provider}`; retired.push(s.id); }
   writeJson('scripts.json', all);
   const add = (Array.isArray(prop.scripts?.add) ? prop.scripts.add : []).filter((s) => s?.code && typeof s.code === 'string').slice(0, 2)
-    .map((s) => ({ id: String(s.id || 'script').replace(/[^a-z0-9_]/gi, '_').slice(0, 40).toLowerCase(), description: String(s.description || '').slice(0, 300), code: s.code.slice(0, 12000) }));
+    .map((s) => ({ id: String(s.id || 'script').replace(/[^a-z0-9_]/gi, '_').slice(0, 40).toLowerCase(), description: String(s.description || '').slice(0, 300), code: normCode(s.code.slice(0, 12000)) }));
   if (add.length) {
     const m = readJson('last_m.json', null);
     if (m) {
