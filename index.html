@@ -97,6 +97,25 @@ a{color:var(--accent)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .theme-btn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .6s ease}}
+.theme-btn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.curve{width:100%;height:220px;display:block}
+.curve text{fill:var(--muted);font:11px 'IBM Plex Mono',monospace}
+.lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.lg i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;padding:14px 16px}
+.kv div{background:var(--sunk);border-radius:8px;padding:8px 10px}
+.kv .sub{display:block}
+.kv b{font-family:'IBM Plex Mono',monospace;font-size:14px}
+.srcs{list-style:none;margin:0;padding:0 16px 14px;display:grid;gap:8px}
+.srcs li{border-top:1px dashed var(--line);padding-top:8px;font-size:12.5px}
+.srcs p{margin:3px 0 0;color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+#news{max-height:520px;overflow:auto}
+#news li{grid-template-columns:1fr}
+#news a{color:var(--ink);text-decoration:none;font-size:13.5px}
+#news a:hover{color:var(--accent)}
+details summary{cursor:pointer;color:var(--accent);font-size:12px;margin-top:4px}
+details ul{margin:6px 0 0;padding-left:16px;font-size:12px}
+.mx td{font-size:12px}
 </style>
 </head>
 <body>
@@ -124,9 +143,27 @@ a{color:var(--accent)}
   </section>
 
   <section>
-    <div class="sec-head"><h2>자문별 성적</h2><span class="sub">적중률 / Brier(낮을수록 좋음). 기준선: 항상 상승 예측, 직전 1시간 방향 그대로.</span></div>
+    <div class="sec-head"><h2>LLM별 과거 정확도</h2><span class="sub">채점이 끝난 예측만 셉니다. 적중률 / Brier(낮을수록 좋음) / 표본 수. 기준선: 항상 상승 예측, 직전 1시간 방향 그대로.</span></div>
     <div class="panel scroll"><table id="providers"></table></div>
+    <div class="panel scroll"><table id="matrix"></table></div>
+    <div class="panel" style="padding:14px 16px">
+      <div class="sec-head"><span class="eyebrow">누적 적중률 추이</span>
+        <div class="tags" role="tablist"><button class="theme-btn" id="cv-1h" type="button" aria-pressed="true">1시간</button><button class="theme-btn" id="cv-close" type="button" aria-pressed="false">다음 종가</button></div></div>
+      <div id="curve"></div>
+      <div class="tags" id="legend"></div>
+    </div>
   </section>
+
+  <div class="two">
+    <section>
+      <div class="sec-head"><h2>수집한 데이터</h2><span class="sub" id="col-meta"></span></div>
+      <div class="panel" id="collected"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>수집한 뉴스</h2><span class="sub">Google News, 전략의 검색어별 · 중복 제거</span></div>
+      <div class="panel"><ul class="timeline" id="news"></ul></div>
+    </section>
+  </div>
 
   <div class="two">
     <section>
@@ -228,7 +265,7 @@ function render(D) {
   $('history').innerHTML = rows.length ? `<thead><tr><th>시각 (KST)</th><th>자문</th><th>v</th>${D.assets.map((a) => `<th>${NAMES[a.key]}</th>`).join('')}<th>근거</th></tr></thead><tbody>${rows.map((p) => `<tr>
       <td class="mono">${kst(p.at)}</td><td>${PROV[p.provider] || esc(p.provider)}</td><td class="mono">${p.strategy_version ?? ''}</td>
       ${D.assets.map((a) => { const pa = p.parsed?.assets?.[a.key]; const rs = p.result?.[a.key] || {}; return `<td><div class="cells">${p.parsed ? cell(pa?.h1, rs['1h']) + '<span class="sub">/</span>' + cell(pa?.close, rs.close) : `<span class="chip wait">${p.failed === 'error' ? '응답 없음' : '형식 오류'}</span>`}</div></td>`; }).join('')}
-      <td class="wrap">${esc(p.parsed?.reason || '')}</td></tr>`).join('')}</tbody>` : '<tbody><tr><td class="empty">아직 기록이 없습니다.</td></tr></tbody>';
+      <td class="wrap">${esc(p.parsed?.reason || '')}<details><summary>본 자료 (페이지 ${(p.sources || []).length} · 헤드라인 ${(p.headlines || []).length})</summary><ul>${(p.sources || []).map((x) => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a></li>`).join('')}${(p.headlines || []).map((h) => `<li>${esc(h.title)}</li>`).join('')}</ul></details></td></tr>`).join('')}</tbody>` : '<tbody><tr><td class="empty">아직 기록이 없습니다.</td></tr></tbody>';
 
   const bp = rep.by_provider || {};
   const pooled = rep.pooled || {};
@@ -238,6 +275,23 @@ function render(D) {
     <tr><td><b>전체</b></td><td>${line(pooled.h1)}</td><td>${line(pooled.close)}</td></tr>
     <tr><td class="sub">기준선: 항상 상승</td><td class="num">${pct(pooled.h1?.always_up_hit)}</td><td class="num">${pct(pooled.close?.always_up_hit)}</td></tr>
     <tr><td class="sub">기준선: 직전 1시간 방향</td><td class="num">${pct(pooled.h1?.momentum_hit)}</td><td class="sub">–</td></tr></tbody>`;
+
+  const mx = rep.matrix || {};
+  const mcell = (x) => x?.n ? `<span class="num"><b>${pct(x.hit)}</b> · ${x.brier.toFixed(3)} · ${x.n}</span>` : '<span class="sub">–</span>';
+  $('matrix').className = 'mx';
+  $('matrix').innerHTML = `<thead><tr><th>LLM × 종목</th>${D.assets.map((a) => `<th>${NAMES[a.key]} 1시간</th><th>${NAMES[a.key]} 종가</th>`).join('')}</tr></thead><tbody>${Object.keys(mx).map((p) => `<tr><td>${PROV[p] || p}</td>${D.assets.map((a) => `<td>${mcell(mx[p][a.key]?.h1)}</td><td>${mcell(mx[p][a.key]?.close)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  CURVE = rep.curve || {};
+  drawCurve();
+
+  const c = D.collected;
+  if (c) {
+    $('col-meta').textContent = `${kst(c.at)} KST 실행분`;
+    const kv = [['VIX', c.vix], ...Object.entries(c.cross || {}).map(([k, v]) => [k, v.last, v.chg_pct])];
+    $('collected').innerHTML = `<div class="kv">${kv.map(([k, v, ch]) => `<div><span class="sub">${esc(k)}</span><b>${v == null ? '–' : (+v).toLocaleString('en-US', { maximumFractionDigits: 3 })}</b>${ch == null ? '' : ` <span class="chip ${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '+' : ''}${ch}%</span>`}</div>`).join('')}</div>
+      <ul class="srcs">${(c.explored || []).map((e) => `<li><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.label)}</a> <span class="sub num">${e.chars}자 · ${e.kind === 'article' ? '기사' : '페이지'}</span><p>${esc(e.excerpt)}</p></li>`).join('')}
+      ${(c.failed || []).map((f) => `<li><span>${esc(f.label)}</span> <span class="chip miss">읽기 실패</span> <span class="sub">${esc(f.why)}</span></li>`).join('')}</ul>`;
+  }
+  $('news').innerHTML = (D.news || []).length ? D.news.map((n) => `<li><div><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a><div class="sub">${kst(n.at)} KST · ${esc(n.query)}</div></div></li>`).join('') : '<li class="empty">아직 수집한 뉴스가 없습니다.</li>';
 
   const s = D.strategies[0];
   if (s) {
@@ -258,6 +312,31 @@ function render(D) {
     <td class="num">${c.avg_chars || '–'}</td><td class="sub">${c.last_at ? rel(c.last_at) + (c.last_ok === false ? ' · 실패' : '') : '–'}</td></tr>`).join('')}</tbody>`;
   $('gen').innerHTML = `데이터 생성 <span class="mono">${esc(D.generated_at)}</span> · 5분마다 다시 불러옵니다.`;
 }
+
+let CURVE = {}, HZ = '1h';
+const PCOL = { gemini: '#3B82C4', qwen: '#7A5AF8', deepseek: '#0F9488', kimi: '#D97706', grok: '#DB2777' };
+function drawCurve() {
+  const data = CURVE[HZ] || {};
+  const W = 720, H = 220, L = 40, R = 12, T = 12, B = 26;
+  const pts = Object.values(data).flat();
+  if (!pts.length) { $('curve').innerHTML = '<div class="empty">채점된 예측이 쌓이면 LLM별 누적 적중률이 여기에 그려집니다.</div>'; $('legend').innerHTML = ''; return; }
+  const ts = pts.map((p) => +new Date(p[0]));
+  const x0 = Math.min(...ts), x1 = Math.max(...ts) || x0 + 1;
+  const X = (t) => L + (t - x0) / ((x1 - x0) || 1) * (W - L - R);
+  const Y = (v) => T + (1 - v) * (H - T - B);
+  const grid = [0, .25, .5, .75, 1].map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" ${v === .5 ? 'stroke-dasharray="4 4" stroke-width="1.4"' : ''}/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join('');
+  const days = [];
+  for (let t = x0; t <= x1; t += 86400e3) days.push(t);
+  const xl = days.filter((_, i) => i % Math.max(1, Math.ceil(days.length / 6)) === 0).map((t) => `<text x="${X(t)}" y="${H - 8}" text-anchor="middle">${new Date(t).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric' })}</text>`).join('');
+  const lines = Object.entries(data).filter(([, r]) => r.length).map(([p, r]) => {
+    const d = r.map((q, i) => `${i ? 'L' : 'M'}${X(+new Date(q[0])).toFixed(1)},${Y(q[1]).toFixed(1)}`).join('');
+    const e = r.at(-1);
+    return `<path d="${d}" fill="none" stroke="${PCOL[p] || 'var(--accent)'}" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${X(+new Date(e[0]))}" cy="${Y(e[1])}" r="3.2" fill="${PCOL[p] || 'var(--accent)'}"/>`;
+  }).join('');
+  $('curve').innerHTML = `<svg class="curve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="LLM별 누적 적중률">${grid}${xl}${lines}</svg>`;
+  $('legend').innerHTML = Object.entries(data).filter(([, r]) => r.length).map(([p, r]) => `<span class="lg"><i style="background:${PCOL[p]}"></i>${PROV[p] || p} <b class="num">${pct(r.at(-1)[1])}</b> <span class="num">(${r.at(-1)[2]})</span></span>`).join('');
+}
+for (const hz of ['1h', 'close']) document.getElementById('cv-' + hz).onclick = () => { HZ = hz; document.getElementById('cv-1h').setAttribute('aria-pressed', hz === '1h'); document.getElementById('cv-close').setAttribute('aria-pressed', hz === 'close'); drawCurve(); };
 
 async function load() {
   try {
