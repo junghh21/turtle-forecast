@@ -20,12 +20,33 @@ fi
 
 SEC=$(docker exec advisor-mcp printenv ADVISOR_SECRET)
 IMG=$(docker inspect -f '{{.Config.Image}}' advisor-mcp)
+
+runner() {
+  timeout 1200 docker run --rm --name "snp-$MODE-$$" --shm-size=512m \
+    -v "$D:/snp" -v "$D/snp.mjs:/app/snp.mjs:ro" \
+    -e SNP_DIR=/snp -e ADVISOR_SECRET="$SEC" -e SNP_SKIP_ASK=$SKIP \
+    --entrypoint node -w /app "$IMG" snp.mjs "$MODE" >> "$D/run.log" 2>&1
+}
+
+sandbox() {
+  timeout 120 docker run --rm --name "snp-sbx-$$" --network none --read-only --tmpfs /tmp:size=16m \
+    --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 512m --cpus 1 -u 1001:1001 \
+    -v "$D/work/sbx:/sbx:ro" --entrypoint node node:22-alpine /sbx/harness.mjs > "$D/work/sbx_out.tmp" 2>> "$D/run.log"
+  local rc=$?
+  mv "$D/work/sbx_out.tmp" "$D/work/sbx_out.json"
+  echo "$(date -u +%FT%TZ) sandbox rc=$rc bytes=$(stat -c %s "$D/work/sbx_out.json")" >> "$D/run.log"
+  chown 1001:1001 "$D/work/sbx_out.json"
+}
+
 echo "$(date -u +%FT%TZ) start $MODE skip_ask=$SKIP" >> "$D/run.log"
-timeout 1200 docker run --rm --name "snp-$MODE-$$" --shm-size=512m \
-  -v "$D:/snp" -v "$D/snp.mjs:/app/snp.mjs:ro" \
-  -e SNP_DIR=/snp -e ADVISOR_SECRET="$SEC" -e SNP_SKIP_ASK=$SKIP \
-  --entrypoint node -w /app "$IMG" snp.mjs "$MODE" >> "$D/run.log" 2>&1
-echo "$(date -u +%FT%TZ) end $MODE rc=$?" >> "$D/run.log"
+runner; rc=$?
+n=0
+while [ "$rc" -eq 10 ] && [ "$n" -lt 6 ]; do
+  sandbox
+  runner; rc=$?
+  n=$((n + 1))
+done
+echo "$(date -u +%FT%TZ) end $MODE rc=$rc sandbox_rounds=$n" >> "$D/run.log"
 
 cd "$D/site" || exit 0
 G="git -c safe.directory=* -c user.name=turtle-bot -c user.email=turtle-bot@users.noreply.github.com"
