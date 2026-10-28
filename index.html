@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>거북이 예보</title>
+<meta name="description" content="외부 자문 LLM 다섯 곳이 매시간 S&P 500·나스닥·TLT·BOIL·KOSPI의 방향을 예측하고, 스스로 정보원과 전략을 고쳐 가는 기록.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F3F5F7; --surface:#FFFFFF; --sunk:#EAEEF1; --ink:#0E1A24; --muted:#5B6B78; --line:#DCE3E9;
+  --accent:#0B6E99; --accent-soft:#E1F0F7; --up:#0F8A5F; --up-soft:#E2F4EC; --down:#C83E34; --down-soft:#FBE7E5; --wait:#8A96A0;
+  --shadow:0 1px 2px rgba(14,26,36,.06),0 4px 16px rgba(14,26,36,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C1318; --surface:#121C23; --sunk:#0F171D; --ink:#E5ECF1; --muted:#8C9DAA; --line:#22313B;
+    --accent:#56B6E2; --accent-soft:#12303F; --up:#3DCB8D; --up-soft:#0F2E22; --down:#FF6E61; --down-soft:#3A1916; --wait:#6E7E8A;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C1318; --surface:#121C23; --sunk:#0F171D; --ink:#E5ECF1; --muted:#8C9DAA; --line:#22313B;
+  --accent:#56B6E2; --accent-soft:#12303F; --up:#3DCB8D; --up-soft:#0F2E22; --down:#FF6E61; --down-soft:#3A1916; --wait:#6E7E8A;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding-inline:16px}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 64px;display:grid;gap:28px}
+.num,.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0;text-wrap:balance}
+h2{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+header{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:flex-end;justify-content:space-between}
+header h1{font-size:30px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+header p{margin:6px 0 0;color:var(--muted);max-width:62ch}
+.status{display:flex;flex-wrap:wrap;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--muted);white-space:nowrap}
+.pill b{color:var(--ink);font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--wait)}
+.dot.live{background:var(--up);box-shadow:0 0 0 3px var(--up-soft)}
+.notice{background:var(--accent-soft);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13.5px;color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);display:grid;gap:12px;align-content:start}
+.asset-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.asset-head h3{font-size:16px;font-weight:700}
+.asset-head .sym{font-size:11.5px;color:var(--muted)}
+.price{font-size:22px;font-weight:600;letter-spacing:-.01em}
+.sub{font-size:12px;color:var(--muted)}
+.preds{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pbox{background:var(--sunk);border-radius:10px;padding:8px 10px;display:grid;gap:4px}
+.pbox .lbl{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+.dir{display:flex;align-items:center;gap:6px;font-weight:700;font-size:15px}
+.dir.up{color:var(--up)} .dir.down{color:var(--down)} .dir.none{color:var(--wait);font-weight:500;font-size:13px}
+.bar{height:5px;border-radius:3px;background:var(--line);position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--up);border-radius:3px}
+.bar.down i{background:var(--down)}
+.spark{width:100%;height:52px;display:block}
+.tally{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.tally b{color:var(--ink);font-weight:600}
+section{display:grid;gap:12px}
+.sec-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.sec-head .sub{max-width:70ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
+th{font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.03em;background:var(--sunk);position:sticky;top:0}
+tr:last-child td{border-bottom:0}
+td.wrap{white-space:normal;min-width:240px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:6px;font-size:11.5px;font-weight:600;font-family:'IBM Plex Mono',monospace}
+.chip.up{background:var(--up-soft);color:var(--up)} .chip.down{background:var(--down-soft);color:var(--down)}
+.chip.hit{background:var(--up-soft);color:var(--up)} .chip.miss{background:var(--down-soft);color:var(--down)} .chip.wait{background:var(--sunk);color:var(--wait)}
+.cells{display:flex;gap:4px;flex-wrap:wrap}
+.two{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px}
+@media (max-width:860px){.two{grid-template-columns:1fr}}
+.playbook{padding:16px;display:grid;gap:12px}
+.playbook blockquote{margin:0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--sunk);border-radius:0 8px 8px 0;font-size:13.5px;white-space:pre-wrap}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink);text-decoration:none;background:var(--surface)}
+a.tag:hover{border-color:var(--accent);color:var(--accent)}
+.timeline{list-style:none;margin:0;padding:6px 16px 14px;display:grid;gap:0}
+.timeline li{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:10px 0;border-bottom:1px dashed var(--line)}
+.timeline li:last-child{border-bottom:0}
+.ver{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;background:var(--accent-soft);color:var(--accent);padding:2px 7px;border-radius:6px;height:fit-content}
+.ver.no{background:var(--sunk);color:var(--wait)}
+.timeline p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.okrate{display:inline-block;width:46px;height:5px;background:var(--line);border-radius:3px;overflow:hidden;vertical-align:middle;margin-right:6px}
+.okrate i{display:block;height:100%;background:var(--accent)}
+footer{color:var(--muted);font-size:12.5px;display:grid;gap:6px;max-width:80ch}
+footer code{font-family:'IBM Plex Mono',monospace;font-size:12px}
+a{color:var(--accent)}
+.empty{padding:18px;color:var(--muted);font-size:13px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.theme-btn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .6s ease}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">LLM advisor panel · hourly</div>
+      <h1><span aria-hidden="true">🐢</span>거북이 예보</h1>
+      <p>외부 자문 다섯 곳(Gemini·Qwen·DeepSeek·Kimi·Grok)이 한 시간에 한 번, 브라우저가 방금 읽어 온 시세·뉴스·페이지를 근거로 다섯 시장의 방향을 예측합니다. 하루 한 번, 채점 결과를 보고 정보원과 판단 지침을 스스로 고칩니다.</p>
+    </div>
+    <div class="status" id="status"></div>
+  </header>
+
+  <div class="notice" id="notice">불러오는 중…</div>
+
+  <section>
+    <div class="sec-head"><h2>최신 예측</h2><span class="sub" id="latest-meta"></span></div>
+    <div class="grid" id="assets"></div>
+    <div class="notice" id="reason" style="background:var(--surface)" hidden></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>최근 예측 기록</h2><span class="sub">칸마다 1시간 / 다음 종가. ✓ 적중 · ✗ 빗나감 · ··· 채점 대기 · – 장이 닫혀 채점 안 함</span></div>
+    <div class="panel scroll"><table id="history"></table></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>자문별 성적</h2><span class="sub">적중률 / Brier(낮을수록 좋음). 기준선: 항상 상승 예측, 직전 1시간 방향 그대로.</span></div>
+    <div class="panel scroll"><table id="providers"></table></div>
+  </section>
+
+  <div class="two">
+    <section>
+      <div class="sec-head"><h2>현재 전략</h2><span class="sub" id="pb-meta"></span></div>
+      <div class="panel playbook" id="playbook"></div>
+    </section>
+    <section>
+      <div class="sec-head"><h2>전략 진화 기록</h2></div>
+      <div class="panel"><ul class="timeline" id="evolution"></ul></div>
+    </section>
+  </div>
+
+  <section>
+    <div class="sec-head"><h2>정보원 탐색</h2><span class="sub">매시간 후보 페이지 하나를 실제 브라우저로 열어 읽힘 여부를 기록합니다. 후보는 예측 자문의 추천과 진화 단계의 제안으로 늘어납니다.</span></div>
+    <div class="panel scroll"><table id="candidates"></table></div>
+  </section>
+
+  <footer id="footer">
+    <div><b>사전등록.</b> 1시간 지평은 시장별 채점 300건, 다음 종가 지평은 장 마감 후 예측만 모아 목표일 40일이 쌓이면 판정합니다. 그 전 수치는 모두 중간 집계입니다. 판정은 적중률의 95% 구간(일 단위 블록 부트스트랩)이 50%와 두 기준선을 모두 넘는지, Brier가 0.25보다 낮은지로 봅니다.</div>
+    <div>투자 조언이 아닙니다. 시세는 Yahoo Finance(지연 가능), 뉴스는 Google News에서 자동 수집합니다.</div>
+    <div id="gen"></div>
+  </footer>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const NAMES = { spx: 'S&P 500', ndx: '나스닥', tlt: 'TLT', boil: 'BOIL', kospi: 'KOSPI' };
+const PROV = { gemini: 'Gemini', qwen: 'Qwen', deepseek: 'DeepSeek', kimi: 'Kimi', grok: 'Grok' };
+const fmtPx = (x) => x == null ? '–' : x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 }) : x.toFixed(2);
+const pct = (x) => x == null ? '–' : (x * 100).toFixed(1) + '%';
+const rel = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return '방금'; if (m < 60) return m + '분 전'; const h = Math.round(m / 60); return h < 48 ? h + '시간 전' : Math.round(h / 24) + '일 전'; };
+const kst = (iso) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+
+function dirHtml(p) {
+  if (!p) return '<span class="dir none">예측 없음</span>';
+  const up = p.dir === 'up';
+  return `<span class="dir ${up ? 'up' : 'down'}">${up ? '▲ 상승' : '▼ 하락'}</span><div class="bar ${up ? '' : 'down'}" title="상승 확률 ${pct(p.p_up)}"><i style="width:${(up ? p.p_up : 1 - p.p_up) * 100}%"></i></div><span class="sub num">상승 확률 ${pct(p.p_up)}</span>`;
+}
+
+function spark(series) {
+  if (!series || series.length < 2) return '<div class="sub">차트 데이터 없음</div>';
+  const W = 240, H = 52, P = 3;
+  const xs = series.map((d) => d[0]), ys = series.map((d) => d[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const X = (x) => P + (x - x0) / (x1 - x0 || 1) * (W - 2 * P), Y = (y) => H - P - (y - y0) / (y1 - y0 || 1) * (H - 2 * P);
+  const d = series.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
+  const up = ys.at(-1) >= ys[0];
+  const col = up ? 'var(--up)' : 'var(--down)';
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="최근 72시간 가격 흐름"><path d="${d}L${X(x1)},${H}L${X(x0)},${H}Z" fill="${col}" opacity=".10"/><path d="${d}" fill="none" stroke="${col}" stroke-width="1.6" vector-effect="non-scaling-stroke"/><circle cx="${X(xs.at(-1))}" cy="${Y(ys.at(-1))}" r="2.6" fill="${col}"/></svg>`;
+}
+
+function cell(pred, res) {
+  if (!pred) return '<span class="chip wait">–</span>';
+  const arrow = pred.dir === 'up' ? '▲' : '▼';
+  if (!res) return `<span class="chip ${pred.dir}">${arrow}${Math.round(pred.p_up * 100)}</span><span class="chip wait">···</span>`;
+  if (res.status) return `<span class="chip ${pred.dir}">${arrow}${Math.round(pred.p_up * 100)}</span><span class="chip wait">–</span>`;
+  return `<span class="chip ${pred.dir}">${arrow}${Math.round(pred.p_up * 100)}</span><span class="chip ${res.hit ? 'hit' : 'miss'}">${res.hit ? '✓' : '✗'}</span>`;
+}
+
+function stat(s) { return s && s.n ? `<b class="num">${pct(s.hit)}</b> <span class="num">n=${s.n}</span>` : '<span>아직 없음</span>'; }
+
+function render(D) {
+  const rep = D.report || {};
+  const latest = D.predictions.find((p) => p.parsed) || null;
+  const lastRun = D.predictions[0];
+  const fresh = Date.now() - new Date(D.generated_at) < 2.5 * 3600e3;
+  $('status').innerHTML = [
+    `<span class="pill"><span class="dot ${fresh ? 'live' : ''}"></span>갱신 <b>${rel(D.generated_at)}</b></span>`,
+    `<span class="pill">예측 <b class="num">${rep.predictions ?? 0}</b>회</span>`,
+    `<span class="pill">전략 <b class="num">v${D.strategies[0]?.version ?? 1}</b></span>`,
+    `<button class="theme-btn" id="theme" type="button">테마 전환</button>`,
+  ].join('');
+  $('theme').onclick = () => { const r = document.documentElement; const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; r.dataset.theme = dark ? 'light' : 'dark'; try { localStorage.setItem('theme', r.dataset.theme); } catch {} };
+  $('notice').textContent = rep.interim !== false
+    ? '중간 집계입니다. 사전등록한 표본(1시간 300건 / 종가 40일)에 닿기 전까지 적중률은 판정이 아닙니다.'
+    : '사전등록 표본에 도달한 시장이 있습니다. 아래 성적표를 판정 기준으로 읽으세요.';
+  $('latest-meta').innerHTML = latest ? `${PROV[latest.provider] || latest.provider} · ${kst(latest.at)} KST · 전략 v${latest.strategy_version}${lastRun && !lastRun.parsed ? ` · 직전 실행(${PROV[lastRun.provider] || lastRun.provider})은 응답 실패` : ''}` : '아직 예측이 없습니다.';
+  $('assets').innerHTML = D.assets.map((a) => {
+    const snap = latest?.assets?.[a.key];
+    const pa = latest?.parsed?.assets?.[a.key];
+    const r = rep.assets?.[a.key] || {};
+    const series = D.series?.[a.key];
+    const lastPx = series?.length ? series.at(-1)[1] : snap?.last?.price;
+    return `<article class="card">
+      <div class="asset-head"><h3>${NAMES[a.key] || a.name}</h3><span class="sym mono">${esc(a.h1)} · ${esc(a.daily)}</span></div>
+      <div><div class="price num">${fmtPx(lastPx)}</div><div class="sub">직전 종가 <span class="num">${fmtPx(snap?.ref?.close)}</span>${snap?.ref ? ` (${snap.ref.date.slice(5)})` : ''}</div></div>
+      ${spark(series)}
+      <div class="preds">
+        <div class="pbox"><span class="lbl">1시간 뒤${snap && !snap.last?.live ? ' · 장 닫힘' : ''}</span>${dirHtml(pa?.h1)}</div>
+        <div class="pbox"><span class="lbl">다음 종가</span>${dirHtml(pa?.close)}</div>
+      </div>
+      <div class="tally"><span>1h ${stat(r.h1)}</span><span>종가 ${stat(r.close)}</span></div>
+    </article>`;
+  }).join('');
+  $('reason').hidden = !latest?.parsed?.reason;
+  $('reason').innerHTML = latest?.parsed?.reason ? `<span class="eyebrow">근거</span><div>${esc(latest.parsed.reason)}</div>` : '';
+
+  const rows = D.predictions.slice(0, 60);
+  $('history').innerHTML = rows.length ? `<thead><tr><th>시각 (KST)</th><th>자문</th><th>v</th>${D.assets.map((a) => `<th>${NAMES[a.key]}</th>`).join('')}<th>근거</th></tr></thead><tbody>${rows.map((p) => `<tr>
+      <td class="mono">${kst(p.at)}</td><td>${PROV[p.provider] || esc(p.provider)}</td><td class="mono">${p.strategy_version ?? ''}</td>
+      ${D.assets.map((a) => { const pa = p.parsed?.assets?.[a.key]; const rs = p.result?.[a.key] || {}; return `<td><div class="cells">${p.parsed ? cell(pa?.h1, rs['1h']) + '<span class="sub">/</span>' + cell(pa?.close, rs.close) : `<span class="chip wait">${p.failed === 'error' ? '응답 없음' : '형식 오류'}</span>`}</div></td>`; }).join('')}
+      <td class="wrap">${esc(p.parsed?.reason || '')}</td></tr>`).join('')}</tbody>` : '<tbody><tr><td class="empty">아직 기록이 없습니다.</td></tr></tbody>';
+
+  const bp = rep.by_provider || {};
+  const pooled = rep.pooled || {};
+  const line = (s) => s?.n ? `<span class="num">${pct(s.hit)} · ${s.brier.toFixed(3)} · n=${s.n}</span>` : '<span class="sub">–</span>';
+  $('providers').innerHTML = `<thead><tr><th>자문</th><th>1시간 (적중 · Brier · n)</th><th>다음 종가 (장 마감 후 예측)</th></tr></thead><tbody>
+    ${Object.keys(bp).map((k) => `<tr><td>${PROV[k] || k}</td><td>${line(bp[k].h1)}</td><td>${line(bp[k].close)}</td></tr>`).join('')}
+    <tr><td><b>전체</b></td><td>${line(pooled.h1)}</td><td>${line(pooled.close)}</td></tr>
+    <tr><td class="sub">기준선: 항상 상승</td><td class="num">${pct(pooled.h1?.always_up_hit)}</td><td class="num">${pct(pooled.close?.always_up_hit)}</td></tr>
+    <tr><td class="sub">기준선: 직전 1시간 방향</td><td class="num">${pct(pooled.h1?.momentum_hit)}</td><td class="sub">–</td></tr></tbody>`;
+
+  const s = D.strategies[0];
+  if (s) {
+    $('pb-meta').textContent = `v${s.version} · ${s.author === 'seed' ? '초기값' : (PROV[s.author] || s.author) + ' 제안'} · ${kst(s.created_at)} KST`;
+    $('playbook').innerHTML = `<div><div class="eyebrow">판단 지침</div><blockquote>${esc(s.guidance)}</blockquote></div>
+      <div><div class="eyebrow">매시간 읽는 페이지</div><div class="tags">${s.sources.map((x) => `<a class="tag" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join('')}</div></div>
+      <div><div class="eyebrow">뉴스 검색어 (검색어당 기사 ${s.articles_per_query}건 원문 읽기)</div><div class="tags">${s.queries.map((q) => `<span class="tag">${esc(q)}</span>`).join('')}</div></div>`;
+  }
+  const evo = [...D.strategies.map((x) => ({ at: x.created_at, adopted: true, version: x.version, provider: x.author, changelog: x.changelog })),
+    ...D.evolutions.filter((e) => !e.adopted)].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 14);
+  $('evolution').innerHTML = evo.length ? evo.map((e) => `<li><span class="ver ${e.adopted ? '' : 'no'}">${e.adopted ? 'v' + e.version : '보류'}</span><div><div class="sub">${kst(e.at)} KST · ${e.provider === 'seed' ? '초기값' : (PROV[e.provider] || esc(e.provider || ''))}</div><p>${esc(e.adopted ? e.changelog : e.why)}</p></div></li>`).join('') : '<li class="empty">아직 기록이 없습니다.</li>';
+
+  const cands = [...(D.candidates || [])].sort((a, b) => (b.tries ? b.ok / b.tries : -1) - (a.tries ? a.ok / a.tries : -1) || b.avg_chars - a.avg_chars);
+  const origin = (o) => o === 'seed' ? '초기 목록' : o?.startsWith('suggest:') ? PROV[o.slice(8)] + ' 추천' : o?.startsWith('evolve:') ? PROV[o.slice(7)] + ' 진화' : esc(o);
+  $('candidates').innerHTML = `<thead><tr><th>후보 페이지</th><th>출처</th><th>읽힘 / 시도</th><th>평균 글자</th><th>마지막 시도</th></tr></thead><tbody>${cands.map((c) => `<tr>
+    <td><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a></td><td>${origin(c.origin)}</td>
+    <td>${c.tries ? `<span class="okrate"><i style="width:${c.ok / c.tries * 100}%"></i></span><span class="num">${c.ok}/${c.tries}</span>` : '<span class="sub">대기</span>'}</td>
+    <td class="num">${c.avg_chars || '–'}</td><td class="sub">${c.last_at ? rel(c.last_at) + (c.last_ok === false ? ' · 실패' : '') : '–'}</td></tr>`).join('')}</tbody>`;
+  $('gen').innerHTML = `데이터 생성 <span class="mono">${esc(D.generated_at)}</span> · 5분마다 다시 불러옵니다.`;
+}
+
+async function load() {
+  try {
+    const r = await fetch('data/latest.json?ts=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    render(await r.json());
+  } catch (e) { $('notice').textContent = '데이터를 불러오지 못했습니다 (' + e.message + '). 첫 실행 전이거나 배포 중일 수 있습니다.'; }
+}
+try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+load();
+setInterval(load, 300000);
+</script>
+</body>
+</html>
