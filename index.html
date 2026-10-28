@@ -4,350 +4,468 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>거북이 예보</title>
-<meta name="description" content="외부 자문 LLM 다섯 곳이 매시간 S&P 500·나스닥·TLT·BOIL·KOSPI의 방향을 예측하고, 스스로 정보원과 전략을 고쳐 가는 기록.">
+<meta name="description" content="LLM 다섯 곳의 S&P 500·나스닥·TLT·BOIL·KOSPI 시간별 방향 예측과 적중 기록">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
 :root{
-  --bg:#F3F5F7; --surface:#FFFFFF; --sunk:#EAEEF1; --ink:#0E1A24; --muted:#5B6B78; --line:#DCE3E9;
-  --accent:#0B6E99; --accent-soft:#E1F0F7; --up:#0F8A5F; --up-soft:#E2F4EC; --down:#C83E34; --down-soft:#FBE7E5; --wait:#8A96A0;
-  --shadow:0 1px 2px rgba(14,26,36,.06),0 4px 16px rgba(14,26,36,.05);
+  --bg:#EEF2F5; --surface:#FFFFFF; --sunk:#E6EBEF; --ink:#0D1922; --muted:#5D6D7A; --line:#D7DFE6;
+  --accent:#0B6E99; --accent-soft:#DDEFF7; --up:#0E8A5D; --up-soft:#DDF3E9; --down:#CF3D33; --down-soft:#FBE5E3; --wait:#8C99A4;
+  --shadow:0 1px 2px rgba(13,25,34,.05),0 8px 24px rgba(13,25,34,.06);
+  --g:#3B82C4; --q:#7A5AF8; --d:#0F9488; --k:#D97706; --x:#DB2777;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0C1318; --surface:#121C23; --sunk:#0F171D; --ink:#E5ECF1; --muted:#8C9DAA; --line:#22313B;
-    --accent:#56B6E2; --accent-soft:#12303F; --up:#3DCB8D; --up-soft:#0F2E22; --down:#FF6E61; --down-soft:#3A1916; --wait:#6E7E8A;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+    --bg:#0A1116; --surface:#111B22; --sunk:#0D161C; --ink:#E4EBF0; --muted:#8B9CA9; --line:#203039;
+    --accent:#58B8E4; --accent-soft:#103042; --up:#3ECD8E; --up-soft:#0E2C21; --down:#FF6F62; --down-soft:#371815; --wait:#6C7C88;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
+    --g:#6AA8E0; --q:#A08BFF; --d:#2DC4B4; --k:#F2A33A; --x:#F062A6;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0C1318; --surface:#121C23; --sunk:#0F171D; --ink:#E5ECF1; --muted:#8C9DAA; --line:#22313B;
-  --accent:#56B6E2; --accent-soft:#12303F; --up:#3DCB8D; --up-soft:#0F2E22; --down:#FF6E61; --down-soft:#3A1916; --wait:#6E7E8A;
-  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  --bg:#0A1116; --surface:#111B22; --sunk:#0D161C; --ink:#E4EBF0; --muted:#8B9CA9; --line:#203039;
+  --accent:#58B8E4; --accent-soft:#103042; --up:#3ECD8E; --up-soft:#0E2C21; --down:#FF6F62; --down-soft:#371815; --wait:#6C7C88;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
+  --g:#6AA8E0; --q:#A08BFF; --d:#2DC4B4; --k:#F2A33A; --x:#F062A6;
 }
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding-inline:16px}
-.wrap{max-width:1180px;margin:0 auto;padding-block:28px 64px;display:grid;gap:28px}
-.num,.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
-h1,h2,h3{margin:0;text-wrap:balance}
-h2{font-size:17px;font-weight:700;letter-spacing:-.01em}
-.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
-header{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:flex-end;justify-content:space-between}
-header h1{font-size:30px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
-header p{margin:6px 0 0;color:var(--muted);max-width:62ch}
-.status{display:flex;flex-wrap:wrap;gap:8px}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--muted);white-space:nowrap}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding-inline:16px}
+.wrap{max-width:1200px;margin:0 auto;padding-block:18px 48px;display:grid;gap:18px}
+.num{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0}
+button{font:inherit;color:inherit}
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.top h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-right:auto;display:flex;gap:8px;align-items:center}
+.turtle{display:inline-block;animation:crawl 6s ease-in-out infinite}
+@keyframes crawl{0%,100%{transform:translateX(0)}50%{transform:translateX(5px)}}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 .pill b{color:var(--ink);font-weight:600}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--wait)}
-.dot.live{background:var(--up);box-shadow:0 0 0 3px var(--up-soft)}
-.notice{background:var(--accent-soft);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13.5px;color:var(--ink)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:14px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);display:grid;gap:12px;align-content:start}
-.asset-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.asset-head h3{font-size:16px;font-weight:700}
-.asset-head .sym{font-size:11.5px;color:var(--muted)}
-.price{font-size:22px;font-weight:600;letter-spacing:-.01em}
-.sub{font-size:12px;color:var(--muted)}
-.preds{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.pbox{background:var(--sunk);border-radius:10px;padding:8px 10px;display:grid;gap:4px}
-.pbox .lbl{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.02em}
-.dir{display:flex;align-items:center;gap:6px;font-weight:700;font-size:15px}
-.dir.up{color:var(--up)} .dir.down{color:var(--down)} .dir.none{color:var(--wait);font-weight:500;font-size:13px}
-.bar{height:5px;border-radius:3px;background:var(--line);position:relative;overflow:hidden}
-.bar i{position:absolute;inset:0 auto 0 0;background:var(--up);border-radius:3px}
-.bar.down i{background:var(--down)}
-.spark{width:100%;height:52px;display:block}
-.tally{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
-.tally b{color:var(--ink);font-weight:600}
-section{display:grid;gap:12px}
-.sec-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
-.sec-head .sub{max-width:70ch}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
-.scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
-th{font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.03em;background:var(--sunk);position:sticky;top:0}
-tr:last-child td{border-bottom:0}
-td.wrap{white-space:normal;min-width:240px;color:var(--muted)}
-.chip{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:6px;font-size:11.5px;font-weight:600;font-family:'IBM Plex Mono',monospace}
-.chip.up{background:var(--up-soft);color:var(--up)} .chip.down{background:var(--down-soft);color:var(--down)}
-.chip.hit{background:var(--up-soft);color:var(--up)} .chip.miss{background:var(--down-soft);color:var(--down)} .chip.wait{background:var(--sunk);color:var(--wait)}
-.cells{display:flex;gap:4px;flex-wrap:wrap}
-.two{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px}
-@media (max-width:860px){.two{grid-template-columns:1fr}}
-.playbook{padding:16px;display:grid;gap:12px}
-.playbook blockquote{margin:0;padding:10px 14px;border-left:3px solid var(--accent);background:var(--sunk);border-radius:0 8px 8px 0;font-size:13.5px;white-space:pre-wrap}
-.tags{display:flex;flex-wrap:wrap;gap:6px}
-.tag{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink);text-decoration:none;background:var(--surface)}
-a.tag:hover{border-color:var(--accent);color:var(--accent)}
-.timeline{list-style:none;margin:0;padding:6px 16px 14px;display:grid;gap:0}
-.timeline li{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:10px 0;border-bottom:1px dashed var(--line)}
-.timeline li:last-child{border-bottom:0}
-.ver{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;background:var(--accent-soft);color:var(--accent);padding:2px 7px;border-radius:6px;height:fit-content}
-.ver.no{background:var(--sunk);color:var(--wait)}
-.timeline p{margin:2px 0 0;font-size:13px;color:var(--muted)}
-.okrate{display:inline-block;width:46px;height:5px;background:var(--line);border-radius:3px;overflow:hidden;vertical-align:middle;margin-right:6px}
-.okrate i{display:block;height:100%;background:var(--accent)}
-footer{color:var(--muted);font-size:12.5px;display:grid;gap:6px;max-width:80ch}
-footer code{font-family:'IBM Plex Mono',monospace;font-size:12px}
-a{color:var(--accent)}
-.empty{padding:18px;color:var(--muted);font-size:13px}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.theme-btn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer}
-@media (prefers-reduced-motion:no-preference){.bar i{transition:width .6s ease}}
-.theme-btn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
-.curve{width:100%;height:220px;display:block}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--wait);position:relative}
+.dot.live{background:var(--up)}
+.dot.live::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--up);animation:ping 1.8s ease-out infinite}
+@keyframes ping{from{transform:scale(.6);opacity:.9}to{transform:scale(1.8);opacity:0}}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;cursor:pointer;color:var(--muted)}
+.iconbtn:hover{color:var(--ink)}
+.ticker{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative;height:38px}
+.ticker .track{display:flex;gap:36px;white-space:nowrap;position:absolute;top:0;left:0;height:100%;align-items:center;padding-left:16px;animation:scroll var(--dur,80s) linear infinite}
+.ticker:hover .track{animation-play-state:paused}
+.ticker a{color:var(--ink);text-decoration:none;font-size:13px}
+.ticker a:hover{color:var(--accent)}
+.ticker .t{color:var(--muted);font-size:11.5px;margin-right:6px;font-family:'IBM Plex Mono',monospace}
+@keyframes scroll{to{transform:translateX(-50%)}}
+.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+@media (max-width:1000px){.cards{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--shadow);display:grid;gap:8px;cursor:pointer;text-align:left;transition:transform .25s ease,border-color .25s ease,box-shadow .25s ease;animation:rise .6s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i)*70ms)}
+.card:hover{transform:translateY(-3px)}
+.card[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft),var(--shadow)}
+@keyframes rise{from{transform:translateY(10px)}to{transform:none}}
+.card .nm{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.card h3{font-size:15px;font-weight:700}
+.card .chg{font-size:12px;font-weight:600}
+.up-t{color:var(--up)} .down-t{color:var(--down)} .wait-t{color:var(--wait)}
+.card .px{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.spark{width:100%;height:40px;display:block}
+.spark path.ln{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:draw 1.2s ease forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.dials{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dial{display:grid;justify-items:center;gap:0}
+.dial svg{width:100%;max-width:96px;height:auto;overflow:visible}
+.dial .needle{transform-origin:50px 50px;transition:transform 1.1s cubic-bezier(.3,1.4,.4,1)}
+.dial .lbl{font-size:10.5px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+.dial .val{font-size:13px;font-weight:700}
+.focus{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px}
+@media (max-width:900px){.focus{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:14px 16px;position:relative;min-width:0}
+.ph{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.ph h2{font-size:15px;font-weight:700;margin-right:auto}
+.seg{display:inline-flex;background:var(--sunk);border-radius:999px;padding:3px}
+.seg button{border:0;background:transparent;padding:4px 11px;border-radius:999px;cursor:pointer;font-size:12.5px;color:var(--muted);transition:background .2s,color .2s}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.chart{width:100%;height:300px;display:block;touch-action:none}
+.chart text{fill:var(--muted);font:11px 'IBM Plex Mono',monospace}
+.chart .ln{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:draw 1.4s ease forwards}
+.mk{cursor:pointer;transition:transform .15s}
+.mk:hover{transform:scale(1.5)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 10px;font-size:12px;max-width:260px;box-shadow:var(--shadow);opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s;z-index:5}
+.tip.on{opacity:1;transform:none}
+.tip b{font-weight:700}
+.board{display:grid;gap:10px}
+.row{display:grid;grid-template-columns:78px 1fr 64px;align-items:center;gap:8px;font-size:12.5px}
+.row .who{display:flex;align-items:center;gap:6px;font-weight:600}
+.sw{width:9px;height:9px;border-radius:3px;display:inline-block;flex:none}
+.track2{height:10px;background:var(--sunk);border-radius:6px;overflow:hidden;position:relative}
+.track2 i{position:absolute;inset:0 auto 0 0;border-radius:6px;width:0;transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.track2 .half{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--muted);opacity:.5}
+.row .v{text-align:right}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:12.5px;transition:opacity .2s,background .2s}
+.chip[aria-pressed="false"]{opacity:.4}
+.curve{width:100%;height:230px;display:block}
 .curve text{fill:var(--muted);font:11px 'IBM Plex Mono',monospace}
-.lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-.lg i{width:14px;height:3px;border-radius:2px;display:inline-block}
-.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;padding:14px 16px}
-.kv div{background:var(--sunk);border-radius:8px;padding:8px 10px}
-.kv .sub{display:block}
-.kv b{font-family:'IBM Plex Mono',monospace;font-size:14px}
-.srcs{list-style:none;margin:0;padding:0 16px 14px;display:grid;gap:8px}
-.srcs li{border-top:1px dashed var(--line);padding-top:8px;font-size:12.5px}
-.srcs p{margin:3px 0 0;color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-#news{max-height:520px;overflow:auto}
-#news li{grid-template-columns:1fr}
-#news a{color:var(--ink);text-decoration:none;font-size:13.5px}
-#news a:hover{color:var(--accent)}
-details summary{cursor:pointer;color:var(--accent);font-size:12px;margin-top:4px}
-details ul{margin:6px 0 0;padding-left:16px;font-size:12px}
-.mx td{font-size:12px}
+.curve .ln{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:draw 1.6s ease forwards}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+.feed{display:grid;gap:8px;max-height:560px;overflow:auto;padding-right:2px}
+.run{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:8px;background:var(--surface);transition:border-color .2s}
+.run:hover{border-color:var(--accent)}
+.run .hd{display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;border:0;background:none;padding:0;text-align:left;width:100%}
+.run .hd .t{color:var(--muted);margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+.mini{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.mc{background:var(--sunk);border-radius:8px;padding:5px 6px;font-size:11px;display:grid;gap:2px}
+.mc .k{color:var(--muted);font-size:10px;font-weight:600}
+.mc .p{display:flex;gap:4px;align-items:center;font-family:'IBM Plex Mono',monospace;font-weight:600}
+.r{width:14px;height:14px;border-radius:50%;display:inline-grid;place-items:center;font-size:9px;color:#fff;flex:none}
+.r.hit{background:var(--up)} .r.miss{background:var(--down)} .r.wait{background:var(--wait);opacity:.55} .r.na{background:transparent;border:1px dashed var(--wait)}
+.more{display:none;font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+.run.open .more{display:grid;gap:6px}
+.more a{color:var(--accent);text-decoration:none}
+.more ul{margin:0;padding-left:16px}
+.vline{display:flex;align-items:center;gap:0;overflow-x:auto;padding:12px 4px 6px}
+.vnode{border:2px solid var(--accent);background:var(--surface);color:var(--accent);border-radius:999px;min-width:42px;height:28px;font:600 12px 'IBM Plex Mono',monospace;cursor:pointer;flex:none;transition:transform .2s,background .2s}
+.vnode:hover{transform:scale(1.08)}
+.vnode[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.vnode.rej{border-style:dashed;border-color:var(--wait);color:var(--wait);min-width:28px}
+.vgap{height:2px;background:var(--line);flex:1 0 24px}
+.vbody{display:grid;gap:10px;font-size:13px;animation:rise .35s ease both}
+.vbody blockquote{margin:0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--sunk);border-radius:0 10px 10px 0;white-space:pre-wrap}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink);text-decoration:none;background:var(--surface)}
+a.tag:hover{border-color:var(--accent);color:var(--accent)}
+.vmeta{font-size:12px;color:var(--muted)}
+.lab{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.cand{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px 10px;text-decoration:none;color:var(--ink);transition:transform .2s,border-color .2s;background:var(--surface)}
+.cand:hover{transform:translateY(-2px);border-color:var(--accent)}
+.ring{flex:none}
+.ring circle.fg{transition:stroke-dashoffset 1s ease}
+.cand .nm{font-size:12.5px;font-weight:600;line-height:1.3}
+.cand .og{font-size:11px;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.tile{background:var(--sunk);border-radius:12px;padding:10px;display:grid;gap:2px}
+.tile .k{font-size:11px;color:var(--muted)}
+.tile .v{font-size:16px;font-weight:600}
+.srcs{display:grid;gap:6px;margin-top:10px}
+.src{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-size:12.5px}
+.src a{color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src a:hover{color:var(--accent)}
+.lenbar{width:90px;height:6px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.lenbar i{display:block;height:100%;background:var(--accent);width:0;transition:width 1s ease}
+.empty{color:var(--muted);font-size:13px;padding:24px 0;text-align:center}
+.foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.foot a{color:var(--muted)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.spark path.ln,.chart .ln,.curve .ln{stroke-dasharray:none;stroke-dashoffset:0}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div>
-      <div class="eyebrow">LLM advisor panel · hourly</div>
-      <h1><span aria-hidden="true">🐢</span>거북이 예보</h1>
-      <p>외부 자문 다섯 곳(Gemini·Qwen·DeepSeek·Kimi·Grok)이 한 시간에 한 번, 브라우저가 방금 읽어 온 시세·뉴스·페이지를 근거로 다섯 시장의 방향을 예측합니다. 하루 한 번, 채점 결과를 보고 정보원과 판단 지침을 스스로 고칩니다.</p>
-    </div>
-    <div class="status" id="status"></div>
-  </header>
-
-  <div class="notice" id="notice">불러오는 중…</div>
-
-  <section>
-    <div class="sec-head"><h2>최신 예측</h2><span class="sub" id="latest-meta"></span></div>
-    <div class="grid" id="assets"></div>
-    <div class="notice" id="reason" style="background:var(--surface)" hidden></div>
-  </section>
-
-  <section>
-    <div class="sec-head"><h2>최근 예측 기록</h2><span class="sub">칸마다 1시간 / 다음 종가. ✓ 적중 · ✗ 빗나감 · ··· 채점 대기 · – 장이 닫혀 채점 안 함</span></div>
-    <div class="panel scroll"><table id="history"></table></div>
-  </section>
-
-  <section>
-    <div class="sec-head"><h2>LLM별 과거 정확도</h2><span class="sub">채점이 끝난 예측만 셉니다. 적중률 / Brier(낮을수록 좋음) / 표본 수. 기준선: 항상 상승 예측, 직전 1시간 방향 그대로.</span></div>
-    <div class="panel scroll"><table id="providers"></table></div>
-    <div class="panel scroll"><table id="matrix"></table></div>
-    <div class="panel" style="padding:14px 16px">
-      <div class="sec-head"><span class="eyebrow">누적 적중률 추이</span>
-        <div class="tags" role="tablist"><button class="theme-btn" id="cv-1h" type="button" aria-pressed="true">1시간</button><button class="theme-btn" id="cv-close" type="button" aria-pressed="false">다음 종가</button></div></div>
-      <div id="curve"></div>
-      <div class="tags" id="legend"></div>
-    </div>
-  </section>
-
-  <div class="two">
-    <section>
-      <div class="sec-head"><h2>수집한 데이터</h2><span class="sub" id="col-meta"></span></div>
-      <div class="panel" id="collected"></div>
-    </section>
-    <section>
-      <div class="sec-head"><h2>수집한 뉴스</h2><span class="sub">Google News, 전략의 검색어별 · 중복 제거</span></div>
-      <div class="panel"><ul class="timeline" id="news"></ul></div>
-    </section>
+  <div class="top">
+    <h1><span class="turtle" aria-hidden="true">🐢</span>거북이 예보</h1>
+    <span class="pill" id="live"><span class="dot"></span>…</span>
+    <span class="pill" id="next">다음 예측 <b class="num">–</b></span>
+    <span class="pill" id="count">예측 <b class="num">0</b></span>
+    <button class="iconbtn" id="theme" type="button" aria-label="테마 전환">◐</button>
   </div>
 
-  <div class="two">
-    <section>
-      <div class="sec-head"><h2>현재 전략</h2><span class="sub" id="pb-meta"></span></div>
-      <div class="panel playbook" id="playbook"></div>
-    </section>
-    <section>
-      <div class="sec-head"><h2>전략 진화 기록</h2></div>
-      <div class="panel"><ul class="timeline" id="evolution"></ul></div>
-    </section>
+  <div class="ticker" aria-label="최근 뉴스"><div class="track" id="ticker"></div></div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="focus">
+    <div class="panel">
+      <div class="ph"><h2 id="f-title">–</h2>
+        <div class="seg" id="f-hz"><button type="button" data-hz="1h" aria-pressed="true">1시간</button><button type="button" data-hz="close" aria-pressed="false">종가</button></div>
+      </div>
+      <svg class="chart" id="chart" role="img" aria-label="가격과 예측 표시"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h2>적중률</h2><span class="vmeta" id="b-sub"></span></div>
+      <div class="board" id="board"></div>
+    </div>
   </div>
 
-  <section>
-    <div class="sec-head"><h2>정보원 탐색</h2><span class="sub">매시간 후보 페이지 하나를 실제 브라우저로 열어 읽힘 여부를 기록합니다. 후보는 예측 자문의 추천과 진화 단계의 제안으로 늘어납니다.</span></div>
-    <div class="panel scroll"><table id="candidates"></table></div>
-  </section>
+  <div class="panel">
+    <div class="ph"><h2>누적 적중률</h2>
+      <div class="chips" id="llms"></div>
+      <div class="seg" id="c-hz"><button type="button" data-hz="1h" aria-pressed="true">1시간</button><button type="button" data-hz="close" aria-pressed="false">종가</button></div>
+    </div>
+    <svg class="curve" id="curve" role="img" aria-label="LLM별 누적 적중률"></svg>
+  </div>
 
-  <footer id="footer">
-    <div><b>사전등록.</b> 1시간 지평은 시장별 채점 300건, 다음 종가 지평은 장 마감 후 예측만 모아 목표일 40일이 쌓이면 판정합니다. 그 전 수치는 모두 중간 집계입니다. 판정은 적중률의 95% 구간(일 단위 블록 부트스트랩)이 50%와 두 기준선을 모두 넘는지, Brier가 0.25보다 낮은지로 봅니다.</div>
-    <div>투자 조언이 아닙니다. 시세는 Yahoo Finance(지연 가능), 뉴스는 Google News에서 자동 수집합니다.</div>
-    <div id="gen"></div>
-  </footer>
+  <div class="grid2">
+    <div class="panel">
+      <div class="ph"><h2>예측 기록</h2></div>
+      <div class="feed" id="feed"></div>
+    </div>
+    <div class="panel" style="display:grid;gap:14px;align-content:start">
+      <div><div class="ph"><h2>전략 진화</h2></div><div class="vline" id="vline"></div><div id="vbody"></div></div>
+      <div><div class="ph"><h2>수집 데이터</h2><span class="vmeta" id="c-at"></span></div><div class="tiles" id="tiles"></div><div class="srcs" id="srcs"></div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ph"><h2>정보원 탐색</h2><span class="vmeta" id="lab-sub"></span></div>
+    <div class="lab" id="lab"></div>
+  </div>
+
+  <div class="foot"><span id="gen"></span><a href="https://github.com/junghh21/turtle-forecast/blob/main/PREREG.md" target="_blank" rel="noopener">사전등록</a></div>
 </div>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const NAMES = { spx: 'S&P 500', ndx: '나스닥', tlt: 'TLT', boil: 'BOIL', kospi: 'KOSPI' };
 const PROV = { gemini: 'Gemini', qwen: 'Qwen', deepseek: 'DeepSeek', kimi: 'Kimi', grok: 'Grok' };
+const PC = { gemini: 'var(--g)', qwen: 'var(--q)', deepseek: 'var(--d)', kimi: 'var(--k)', grok: 'var(--x)' };
+const pct = (x) => x == null ? '–' : Math.round(x * 100) + '%';
 const fmtPx = (x) => x == null ? '–' : x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 }) : x.toFixed(2);
-const pct = (x) => x == null ? '–' : (x * 100).toFixed(1) + '%';
-const rel = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); if (m < 1) return '방금'; if (m < 60) return m + '분 전'; const h = Math.round(m / 60); return h < 48 ? h + '시간 전' : Math.round(h / 24) + '일 전'; };
 const kst = (iso) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+const rel = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? '방금' : m < 60 ? m + '분 전' : m < 2880 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전'; };
+let D = null, SEL = 'spx', FHZ = '1h', CHZ = '1h';
+const ON = Object.fromEntries(Object.keys(PROV).map((k) => [k, true]));
 
-function dirHtml(p) {
-  if (!p) return '<span class="dir none">예측 없음</span>';
-  const up = p.dir === 'up';
-  return `<span class="dir ${up ? 'up' : 'down'}">${up ? '▲ 상승' : '▼ 하락'}</span><div class="bar ${up ? '' : 'down'}" title="상승 확률 ${pct(p.p_up)}"><i style="width:${(up ? p.p_up : 1 - p.p_up) * 100}%"></i></div><span class="sub num">상승 확률 ${pct(p.p_up)}</span>`;
+function countUp(el, to, fmt) {
+  const from = +el.dataset.v || 0; el.dataset.v = to;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = fmt(to); return; }
+  const t0 = performance.now();
+  const step = (t) => { const k = Math.min(1, (t - t0) / 700), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+const pathLen = (svg) => svg.querySelectorAll('.ln').forEach((p) => p.style.setProperty('--len', Math.ceil(p.getTotalLength())));
+
+function dial(p, label) {
+  const has = !!p, v = has ? p.p_up : .5, ang = (v - .5) * 180;
+  const col = !has ? 'var(--wait)' : p.dir === 'up' ? 'var(--up)' : 'var(--down)';
+  return `<div class="dial"><svg viewBox="0 0 100 58" aria-hidden="true">
+    <path d="M8 50 A42 42 0 0 1 92 50" fill="none" stroke="var(--sunk)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M8 50 A42 42 0 0 1 50 8" fill="none" stroke="var(--down-soft)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M50 8 A42 42 0 0 1 92 50" fill="none" stroke="var(--up-soft)" stroke-width="9" stroke-linecap="round"/>
+    <g class="needle" data-ang="${ang}" style="transform:rotate(0deg)"><line x1="50" y1="50" x2="50" y2="14" stroke="${col}" stroke-width="3" stroke-linecap="round"/></g>
+    <circle cx="50" cy="50" r="5" fill="${col}"/></svg>
+    <span class="val num ${!has ? 'wait-t' : p.dir === 'up' ? 'up-t' : 'down-t'}">${has ? (p.dir === 'up' ? '▲ ' : '▼ ') + pct(p.p_up) : '–'}</span><span class="lbl">${label}</span></div>`;
 }
 
-function spark(series) {
-  if (!series || series.length < 2) return '<div class="sub">차트 데이터 없음</div>';
-  const W = 240, H = 52, P = 3;
-  const xs = series.map((d) => d[0]), ys = series.map((d) => d[1]);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const X = (x) => P + (x - x0) / (x1 - x0 || 1) * (W - 2 * P), Y = (y) => H - P - (y - y0) / (y1 - y0 || 1) * (H - 2 * P);
-  const d = series.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
-  const up = ys.at(-1) >= ys[0];
-  const col = up ? 'var(--up)' : 'var(--down)';
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="최근 72시간 가격 흐름"><path d="${d}L${X(x1)},${H}L${X(x0)},${H}Z" fill="${col}" opacity=".10"/><path d="${d}" fill="none" stroke="${col}" stroke-width="1.6" vector-effect="non-scaling-stroke"/><circle cx="${X(xs.at(-1))}" cy="${Y(ys.at(-1))}" r="2.6" fill="${col}"/></svg>`;
+function spark(s) {
+  if (!s || s.length < 2) return '<svg class="spark"></svg>';
+  const W = 200, H = 40, ys = s.map((d) => d[1]), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const X = (i) => i / (s.length - 1) * W, Y = (y) => H - 3 - (y - y0) / ((y1 - y0) || 1) * (H - 6);
+  const d = s.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
+  const col = ys.at(-1) >= ys[0] ? 'var(--up)' : 'var(--down)';
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}L${W},${H}L0,${H}Z" fill="${col}" opacity=".09"/><path class="ln" d="${d}" fill="none" stroke="${col}" stroke-width="1.7" vector-effect="non-scaling-stroke"/></svg>`;
 }
 
-function cell(pred, res) {
-  if (!pred) return '<span class="chip wait">–</span>';
-  const arrow = pred.dir === 'up' ? '▲' : '▼';
-  if (!res) return `<span class="chip ${pred.dir}">${arrow}${Math.round(pred.p_up * 100)}</span><span class="chip wait">···</span>`;
-  if (res.status) return `<span class="chip ${pred.dir}">${arrow}${Math.round(pred.p_up * 100)}</span><span class="chip wait">–</span>`;
-  return `<span class="chip ${pred.dir}">${arrow}${Math.round(pred.p_up * 100)}</span><span class="chip ${res.hit ? 'hit' : 'miss'}">${res.hit ? '✓' : '✗'}</span>`;
-}
+const latestFor = () => D.predictions.find((p) => p.parsed);
 
-function stat(s) { return s && s.n ? `<b class="num">${pct(s.hit)}</b> <span class="num">n=${s.n}</span>` : '<span>아직 없음</span>'; }
-
-function render(D) {
-  const rep = D.report || {};
-  const latest = D.predictions.find((p) => p.parsed) || null;
-  const lastRun = D.predictions[0];
+function renderTop() {
   const fresh = Date.now() - new Date(D.generated_at) < 2.5 * 3600e3;
-  $('status').innerHTML = [
-    `<span class="pill"><span class="dot ${fresh ? 'live' : ''}"></span>갱신 <b>${rel(D.generated_at)}</b></span>`,
-    `<span class="pill">예측 <b class="num">${rep.predictions ?? 0}</b>회</span>`,
-    `<span class="pill">전략 <b class="num">v${D.strategies[0]?.version ?? 1}</b></span>`,
-    `<button class="theme-btn" id="theme" type="button">테마 전환</button>`,
-  ].join('');
-  $('theme').onclick = () => { const r = document.documentElement; const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; r.dataset.theme = dark ? 'light' : 'dark'; try { localStorage.setItem('theme', r.dataset.theme); } catch {} };
-  $('notice').textContent = rep.interim !== false
-    ? '중간 집계입니다. 사전등록한 표본(1시간 300건 / 종가 40일)에 닿기 전까지 적중률은 판정이 아닙니다.'
-    : '사전등록 표본에 도달한 시장이 있습니다. 아래 성적표를 판정 기준으로 읽으세요.';
-  $('latest-meta').innerHTML = latest ? `${PROV[latest.provider] || latest.provider} · ${kst(latest.at)} KST · 전략 v${latest.strategy_version}${lastRun && !lastRun.parsed ? ` · 직전 실행(${PROV[lastRun.provider] || lastRun.provider})은 응답 실패` : ''}` : '아직 예측이 없습니다.';
-  $('assets').innerHTML = D.assets.map((a) => {
-    const snap = latest?.assets?.[a.key];
-    const pa = latest?.parsed?.assets?.[a.key];
-    const r = rep.assets?.[a.key] || {};
-    const series = D.series?.[a.key];
-    const lastPx = series?.length ? series.at(-1)[1] : snap?.last?.price;
-    return `<article class="card">
-      <div class="asset-head"><h3>${NAMES[a.key] || a.name}</h3><span class="sym mono">${esc(a.h1)} · ${esc(a.daily)}</span></div>
-      <div><div class="price num">${fmtPx(lastPx)}</div><div class="sub">직전 종가 <span class="num">${fmtPx(snap?.ref?.close)}</span>${snap?.ref ? ` (${snap.ref.date.slice(5)})` : ''}</div></div>
-      ${spark(series)}
-      <div class="preds">
-        <div class="pbox"><span class="lbl">1시간 뒤${snap && !snap.last?.live ? ' · 장 닫힘' : ''}</span>${dirHtml(pa?.h1)}</div>
-        <div class="pbox"><span class="lbl">다음 종가</span>${dirHtml(pa?.close)}</div>
-      </div>
-      <div class="tally"><span>1h ${stat(r.h1)}</span><span>종가 ${stat(r.close)}</span></div>
-    </article>`;
-  }).join('');
-  $('reason').hidden = !latest?.parsed?.reason;
-  $('reason').innerHTML = latest?.parsed?.reason ? `<span class="eyebrow">근거</span><div>${esc(latest.parsed.reason)}</div>` : '';
-
-  const rows = D.predictions.slice(0, 60);
-  $('history').innerHTML = rows.length ? `<thead><tr><th>시각 (KST)</th><th>자문</th><th>v</th>${D.assets.map((a) => `<th>${NAMES[a.key]}</th>`).join('')}<th>근거</th></tr></thead><tbody>${rows.map((p) => `<tr>
-      <td class="mono">${kst(p.at)}</td><td>${PROV[p.provider] || esc(p.provider)}</td><td class="mono">${p.strategy_version ?? ''}</td>
-      ${D.assets.map((a) => { const pa = p.parsed?.assets?.[a.key]; const rs = p.result?.[a.key] || {}; return `<td><div class="cells">${p.parsed ? cell(pa?.h1, rs['1h']) + '<span class="sub">/</span>' + cell(pa?.close, rs.close) : `<span class="chip wait">${p.failed === 'error' ? '응답 없음' : '형식 오류'}</span>`}</div></td>`; }).join('')}
-      <td class="wrap">${esc(p.parsed?.reason || '')}<details><summary>본 자료 (페이지 ${(p.sources || []).length} · 헤드라인 ${(p.headlines || []).length})</summary><ul>${(p.sources || []).map((x) => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a></li>`).join('')}${(p.headlines || []).map((h) => `<li>${esc(h.title)}</li>`).join('')}</ul></details></td></tr>`).join('')}</tbody>` : '<tbody><tr><td class="empty">아직 기록이 없습니다.</td></tr></tbody>';
-
-  const bp = rep.by_provider || {};
-  const pooled = rep.pooled || {};
-  const line = (s) => s?.n ? `<span class="num">${pct(s.hit)} · ${s.brier.toFixed(3)} · n=${s.n}</span>` : '<span class="sub">–</span>';
-  $('providers').innerHTML = `<thead><tr><th>자문</th><th>1시간 (적중 · Brier · n)</th><th>다음 종가 (장 마감 후 예측)</th></tr></thead><tbody>
-    ${Object.keys(bp).map((k) => `<tr><td>${PROV[k] || k}</td><td>${line(bp[k].h1)}</td><td>${line(bp[k].close)}</td></tr>`).join('')}
-    <tr><td><b>전체</b></td><td>${line(pooled.h1)}</td><td>${line(pooled.close)}</td></tr>
-    <tr><td class="sub">기준선: 항상 상승</td><td class="num">${pct(pooled.h1?.always_up_hit)}</td><td class="num">${pct(pooled.close?.always_up_hit)}</td></tr>
-    <tr><td class="sub">기준선: 직전 1시간 방향</td><td class="num">${pct(pooled.h1?.momentum_hit)}</td><td class="sub">–</td></tr></tbody>`;
-
-  const mx = rep.matrix || {};
-  const mcell = (x) => x?.n ? `<span class="num"><b>${pct(x.hit)}</b> · ${x.brier.toFixed(3)} · ${x.n}</span>` : '<span class="sub">–</span>';
-  $('matrix').className = 'mx';
-  $('matrix').innerHTML = `<thead><tr><th>LLM × 종목</th>${D.assets.map((a) => `<th>${NAMES[a.key]} 1시간</th><th>${NAMES[a.key]} 종가</th>`).join('')}</tr></thead><tbody>${Object.keys(mx).map((p) => `<tr><td>${PROV[p] || p}</td>${D.assets.map((a) => `<td>${mcell(mx[p][a.key]?.h1)}</td><td>${mcell(mx[p][a.key]?.close)}</td>`).join('')}</tr>`).join('')}</tbody>`;
-  CURVE = rep.curve || {};
-  drawCurve();
-
-  const c = D.collected;
-  if (c) {
-    $('col-meta').textContent = `${kst(c.at)} KST 실행분`;
-    const kv = [['VIX', c.vix], ...Object.entries(c.cross || {}).map(([k, v]) => [k, v.last, v.chg_pct])];
-    $('collected').innerHTML = `<div class="kv">${kv.map(([k, v, ch]) => `<div><span class="sub">${esc(k)}</span><b>${v == null ? '–' : (+v).toLocaleString('en-US', { maximumFractionDigits: 3 })}</b>${ch == null ? '' : ` <span class="chip ${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '+' : ''}${ch}%</span>`}</div>`).join('')}</div>
-      <ul class="srcs">${(c.explored || []).map((e) => `<li><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.label)}</a> <span class="sub num">${e.chars}자 · ${e.kind === 'article' ? '기사' : '페이지'}</span><p>${esc(e.excerpt)}</p></li>`).join('')}
-      ${(c.failed || []).map((f) => `<li><span>${esc(f.label)}</span> <span class="chip miss">읽기 실패</span> <span class="sub">${esc(f.why)}</span></li>`).join('')}</ul>`;
-  }
-  $('news').innerHTML = (D.news || []).length ? D.news.map((n) => `<li><div><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a><div class="sub">${kst(n.at)} KST · ${esc(n.query)}</div></div></li>`).join('') : '<li class="empty">아직 수집한 뉴스가 없습니다.</li>';
-
-  const s = D.strategies[0];
-  if (s) {
-    $('pb-meta').textContent = `v${s.version} · ${s.author === 'seed' ? '초기값' : (PROV[s.author] || s.author) + ' 제안'} · ${kst(s.created_at)} KST`;
-    $('playbook').innerHTML = `<div><div class="eyebrow">판단 지침</div><blockquote>${esc(s.guidance)}</blockquote></div>
-      <div><div class="eyebrow">매시간 읽는 페이지</div><div class="tags">${s.sources.map((x) => `<a class="tag" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join('')}</div></div>
-      <div><div class="eyebrow">뉴스 검색어 (검색어당 기사 ${s.articles_per_query}건 원문 읽기)</div><div class="tags">${s.queries.map((q) => `<span class="tag">${esc(q)}</span>`).join('')}</div></div>`;
-  }
-  const evo = [...D.strategies.map((x) => ({ at: x.created_at, adopted: true, version: x.version, provider: x.author, changelog: x.changelog })),
-    ...D.evolutions.filter((e) => !e.adopted)].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 14);
-  $('evolution').innerHTML = evo.length ? evo.map((e) => `<li><span class="ver ${e.adopted ? '' : 'no'}">${e.adopted ? 'v' + e.version : '보류'}</span><div><div class="sub">${kst(e.at)} KST · ${e.provider === 'seed' ? '초기값' : (PROV[e.provider] || esc(e.provider || ''))}</div><p>${esc(e.adopted ? e.changelog : e.why)}</p></div></li>`).join('') : '<li class="empty">아직 기록이 없습니다.</li>';
-
-  const cands = [...(D.candidates || [])].sort((a, b) => (b.tries ? b.ok / b.tries : -1) - (a.tries ? a.ok / a.tries : -1) || b.avg_chars - a.avg_chars);
-  const origin = (o) => o === 'seed' ? '초기 목록' : o?.startsWith('suggest:') ? PROV[o.slice(8)] + ' 추천' : o?.startsWith('evolve:') ? PROV[o.slice(7)] + ' 진화' : esc(o);
-  $('candidates').innerHTML = `<thead><tr><th>후보 페이지</th><th>출처</th><th>읽힘 / 시도</th><th>평균 글자</th><th>마지막 시도</th></tr></thead><tbody>${cands.map((c) => `<tr>
-    <td><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a></td><td>${origin(c.origin)}</td>
-    <td>${c.tries ? `<span class="okrate"><i style="width:${c.ok / c.tries * 100}%"></i></span><span class="num">${c.ok}/${c.tries}</span>` : '<span class="sub">대기</span>'}</td>
-    <td class="num">${c.avg_chars || '–'}</td><td class="sub">${c.last_at ? rel(c.last_at) + (c.last_ok === false ? ' · 실패' : '') : '–'}</td></tr>`).join('')}</tbody>`;
-  $('gen').innerHTML = `데이터 생성 <span class="mono">${esc(D.generated_at)}</span> · 5분마다 다시 불러옵니다.`;
+  $('live').innerHTML = `<span class="dot ${fresh ? 'live' : ''}"></span>갱신 <b>${rel(D.generated_at)}</b>`;
+  countUp($('count').querySelector('b'), D.report?.predictions || 0, (v) => Math.round(v));
+  const news = (D.news?.length ? D.news : (D.predictions[0]?.headlines || [])).slice(0, 24);
+  const items = news.map((n) => `<a href="${esc(n.link || '#')}" target="_blank" rel="noopener"><span class="t">${kst(n.at)}</span>${esc(n.title)}</a>`).join('');
+  $('ticker').innerHTML = items + items;
+  $('ticker').style.setProperty('--dur', Math.max(40, news.length * 7) + 's');
 }
 
-let CURVE = {}, HZ = '1h';
-const PCOL = { gemini: '#3B82C4', qwen: '#7A5AF8', deepseek: '#0F9488', kimi: '#D97706', grok: '#DB2777' };
-function drawCurve() {
-  const data = CURVE[HZ] || {};
-  const W = 720, H = 220, L = 40, R = 12, T = 12, B = 26;
-  const pts = Object.values(data).flat();
-  if (!pts.length) { $('curve').innerHTML = '<div class="empty">채점된 예측이 쌓이면 LLM별 누적 적중률이 여기에 그려집니다.</div>'; $('legend').innerHTML = ''; return; }
-  const ts = pts.map((p) => +new Date(p[0]));
-  const x0 = Math.min(...ts), x1 = Math.max(...ts) || x0 + 1;
-  const X = (t) => L + (t - x0) / ((x1 - x0) || 1) * (W - L - R);
+function renderCards() {
+  const L = latestFor();
+  $('cards').innerHTML = D.assets.map((a, i) => {
+    const s = D.series?.[a.key] || [];
+    const last = s.at(-1)?.[1] ?? L?.assets?.[a.key]?.last?.price;
+    const lastT = s.at(-1)?.[0];
+    const ref = lastT ? s.find((p) => p[0] >= lastT - 86400)?.[1] : null;
+    const chg = last != null && ref && s.at(-1)[0] - s[0][0] > 6 * 3600 ? (last / ref - 1) * 100 : null;
+    const pa = L?.parsed?.assets?.[a.key];
+    return `<button class="card" type="button" style="--i:${i}" data-k="${a.key}" aria-pressed="${a.key === SEL}">
+      <div class="nm"><h3>${NAMES[a.key]}</h3><span class="chg num ${chg == null ? 'wait-t' : chg >= 0 ? 'up-t' : 'down-t'}">${chg == null ? '' : (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%'}</span></div>
+      <div class="px num" data-to="${last ?? ''}">${fmtPx(last)}</div>
+      ${spark(s)}
+      <div class="dials">${dial(pa?.h1, '1시간')}${dial(pa?.close, '종가')}</div>
+    </button>`;
+  }).join('');
+  $('cards').querySelectorAll('.card').forEach((c) => { c.onclick = () => { SEL = c.dataset.k; $('cards').querySelectorAll('.card').forEach((x) => x.setAttribute('aria-pressed', x === c)); renderFocus(); }; });
+  $('cards').querySelectorAll('svg').forEach(pathLen);
+  requestAnimationFrame(() => requestAnimationFrame(() => $('cards').querySelectorAll('.needle').forEach((n) => { n.style.transform = `rotate(${n.dataset.ang}deg)`; })));
+}
+
+function renderFocus() {
+  const a = D.assets.find((x) => x.key === SEL);
+  $('f-title').textContent = NAMES[SEL];
+  const s = D.series?.[SEL] || [];
+  const svg = $('chart');
+  const W = svg.clientWidth || 800, H = 300, L = 8, R = 62, T = 14, B = 24;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  if (s.length < 2) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">–</text>`; renderBoard(); return; }
+  const marks = D.predictions.filter((p) => p.parsed?.assets?.[SEL]?.[FHZ] && ON[p.provider]).map((p) => {
+    const t = new Date(p.at) / 1000, px = p.assets?.[SEL]?.last?.price;
+    return { p, t, px, pr: p.parsed.assets[SEL][FHZ], res: p.result?.[SEL]?.[FHZ] };
+  }).filter((m) => m.px != null && m.t >= s[0][0]);
+  const xs = s.map((d) => d[0]), ys = [...s.map((d) => d[1]), ...marks.map((m) => m.px)];
+  const x0 = xs[0], x1 = Math.max(xs.at(-1), ...marks.map((m) => m.t)), y0 = Math.min(...ys), y1 = Math.max(...ys), pad = (y1 - y0) * .08 || 1;
+  const X = (t) => L + (t - x0) / ((x1 - x0) || 1) * (W - L - R), Y = (y) => T + (1 - (y - (y0 - pad)) / ((y1 - y0) + 2 * pad)) * (H - T - B);
+  const d = s.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
+  const ticks = [0, .25, .5, .75, 1].map((k) => { const v = y0 - pad + k * ((y1 - y0) + 2 * pad); return `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${W - R + 6}" y="${Y(v) + 4}">${fmtPx(v)}</text>`; }).join('');
+  const days = []; for (let t = Math.ceil(x0 / 86400) * 86400; t <= x1; t += 86400) days.push(t);
+  const xt = days.map((t) => `<line x1="${X(t)}" x2="${X(t)}" y1="${T}" y2="${H - B}" stroke="var(--line)" stroke-dasharray="2 4"/><text x="${X(t)}" y="${H - 6}" text-anchor="middle">${new Date(t * 1000).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric' })}</text>`).join('');
+  const mk = marks.map((m, i) => {
+    const x = X(m.t), y = Y(m.px), up = m.pr.dir === 'up';
+    const fill = !m.res ? 'var(--wait)' : m.res.status ? 'var(--wait)' : m.res.hit ? 'var(--up)' : 'var(--down)';
+    const tri = up ? `M${x},${y - 13} l6,9 h-12z` : `M${x},${y + 13} l6,-9 h-12z`;
+    return `<g class="mk" data-i="${i}" style="transform-origin:${x}px ${y}px"><circle cx="${x}" cy="${y}" r="3.5" fill="${PC[m.p.provider]}"/><path d="${tri}" fill="${fill}"/></g>`;
+  }).join('');
+  const col = s.at(-1)[1] >= s[0][1] ? 'var(--up)' : 'var(--down)';
+  svg.innerHTML = `<defs><linearGradient id="fg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".18"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    ${ticks}${xt}<path d="${d}L${X(xs.at(-1))},${H - B}L${X(x0)},${H - B}Z" fill="url(#fg)"/><path class="ln" d="${d}" fill="none" stroke="${col}" stroke-width="2"/>
+    <circle cx="${X(xs.at(-1))}" cy="${Y(s.at(-1)[1])}" r="4" fill="${col}"><animate attributeName="r" values="4;7;4" dur="1.8s" repeatCount="indefinite"/></circle>
+    <line id="xh" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="3 3" opacity="0"/>${mk}`;
+  pathLen(svg);
+  const tip = $('tip');
+  svg.onmousemove = (e) => {
+    const r = svg.getBoundingClientRect(), mx = (e.clientX - r.left) * (W / r.width);
+    const t = x0 + (mx - L) / (W - L - R) * (x1 - x0);
+    const g = e.target.closest('.mk');
+    const xh = svg.querySelector('#xh');
+    if (g) {
+      const m = marks[+g.dataset.i];
+      const res = !m.res ? '채점 대기' : m.res.status ? '채점 안 함' : m.res.hit ? '✓ 적중' : '✗ 빗나감';
+      tip.innerHTML = `<b style="color:${PC[m.p.provider]}">${PROV[m.p.provider]}</b> · ${kst(m.p.at)}<br>${m.pr.dir === 'up' ? '▲ 상승' : '▼ 하락'} ${pct(m.pr.p_up)} · <b>${res}</b>${m.p.parsed.reason ? `<br><span style="opacity:.8">${esc(m.p.parsed.reason)}</span>` : ''}`;
+    } else {
+      let best = s[0]; for (const p of s) if (Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
+      tip.innerHTML = `<b class="num">${fmtPx(best[1])}</b><br>${kst(new Date(best[0] * 1000).toISOString())}`;
+      xh.setAttribute('x1', X(best[0])); xh.setAttribute('x2', X(best[0])); xh.setAttribute('opacity', '.6');
+    }
+    const pr = svg.parentElement.getBoundingClientRect();
+    tip.style.left = Math.min(e.clientX - pr.left + 14, pr.width - 270) + 'px';
+    tip.style.top = (e.clientY - pr.top + 14) + 'px';
+    tip.classList.add('on');
+  };
+  svg.onmouseleave = () => { tip.classList.remove('on'); svg.querySelector('#xh')?.setAttribute('opacity', '0'); };
+  renderBoard();
+}
+
+function renderBoard() {
+  const mx = D.report?.matrix || {};
+  const rows = Object.keys(PROV).map((p) => ({ p, s: mx[p]?.[SEL]?.[FHZ] })).sort((a, b) => (b.s?.hit ?? -1) - (a.s?.hit ?? -1));
+  const pooled = D.report?.assets?.[SEL]?.[FHZ];
+  $('b-sub').textContent = `${NAMES[SEL]} · ${FHZ === '1h' ? '1시간' : '종가'}`;
+  $('board').innerHTML = rows.map(({ p, s }) => `<div class="row"><span class="who"><span class="sw" style="background:${PC[p]}"></span>${PROV[p]}</span>
+    <span class="track2"><i style="background:${PC[p]}" data-w="${s?.n ? s.hit * 100 : 0}"></i><span class="half"></span></span>
+    <span class="v num">${s?.n ? `<b>${pct(s.hit)}</b> <span class="vmeta">${s.n}</span>` : '<span class="vmeta">–</span>'}</span></div>`).join('')
+    + `<div class="row" style="border-top:1px dashed var(--line);padding-top:8px"><span class="who">전체</span><span class="track2"><i style="background:var(--accent)" data-w="${pooled?.n ? pooled.hit * 100 : 0}"></i><span class="half"></span></span><span class="v num">${pooled?.n ? `<b>${pct(pooled.hit)}</b> <span class="vmeta">${pooled.n}</span>` : '<span class="vmeta">–</span>'}</span></div>`
+    + `<div class="row"><span class="who vmeta">항상 ▲</span><span class="track2"><i style="background:var(--wait)" data-w="${pooled?.n ? pooled.always_up_hit * 100 : 0}"></i><span class="half"></span></span><span class="v num vmeta">${pooled?.n ? pct(pooled.always_up_hit) : '–'}</span></div>`;
+  requestAnimationFrame(() => requestAnimationFrame(() => $('board').querySelectorAll('i[data-w]').forEach((i) => { i.style.width = i.dataset.w + '%'; })));
+}
+
+function renderLLMs() {
+  $('llms').innerHTML = Object.keys(PROV).map((p) => `<button class="chip" type="button" data-p="${p}" aria-pressed="${ON[p]}"><span class="sw" style="background:${PC[p]}"></span>${PROV[p]}</button>`).join('');
+  $('llms').querySelectorAll('.chip').forEach((c) => { c.onclick = () => { ON[c.dataset.p] = !ON[c.dataset.p]; c.setAttribute('aria-pressed', ON[c.dataset.p]); renderCurve(); renderFeed(); renderFocus(); }; });
+}
+
+function renderCurve() {
+  const data = D.report?.curve?.[CHZ] || {};
+  const svg = $('curve'), W = svg.clientWidth || 900, H = 230, L = 40, R = 14, T = 12, B = 24;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const act = Object.entries(data).filter(([p, r]) => ON[p] && r.length);
+  const all = act.flatMap(([, r]) => r);
   const Y = (v) => T + (1 - v) * (H - T - B);
-  const grid = [0, .25, .5, .75, 1].map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" ${v === .5 ? 'stroke-dasharray="4 4" stroke-width="1.4"' : ''}/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join('');
-  const days = [];
-  for (let t = x0; t <= x1; t += 86400e3) days.push(t);
-  const xl = days.filter((_, i) => i % Math.max(1, Math.ceil(days.length / 6)) === 0).map((t) => `<text x="${X(t)}" y="${H - 8}" text-anchor="middle">${new Date(t).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric' })}</text>`).join('');
-  const lines = Object.entries(data).filter(([, r]) => r.length).map(([p, r]) => {
+  const grid = [0, .25, .5, .75, 1].map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" ${v === .5 ? 'stroke-dasharray="5 4" stroke-width="1.5"' : ''}/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join('');
+  if (!all.length) { svg.innerHTML = grid + `<text x="${W / 2}" y="${H / 2 - 8}" text-anchor="middle">채점 대기 중</text>`; return; }
+  const ts = all.map((q) => +new Date(q[0])), x0 = Math.min(...ts), x1 = Math.max(...ts);
+  const X = (t) => L + (t - x0) / ((x1 - x0) || 1) * (W - L - R);
+  const lines = act.map(([p, r]) => {
     const d = r.map((q, i) => `${i ? 'L' : 'M'}${X(+new Date(q[0])).toFixed(1)},${Y(q[1]).toFixed(1)}`).join('');
     const e = r.at(-1);
-    return `<path d="${d}" fill="none" stroke="${PCOL[p] || 'var(--accent)'}" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${X(+new Date(e[0]))}" cy="${Y(e[1])}" r="3.2" fill="${PCOL[p] || 'var(--accent)'}"/>`;
+    return `<path class="ln" d="${d}" fill="none" stroke="${PC[p]}" stroke-width="2.2"/><circle cx="${X(+new Date(e[0]))}" cy="${Y(e[1])}" r="4" fill="${PC[p]}"/><text x="${Math.min(X(+new Date(e[0])) + 7, W - R - 30)}" y="${Y(e[1]) - 6}" style="fill:${PC[p]};font-weight:600">${pct(e[1])}</text>`;
   }).join('');
-  $('curve').innerHTML = `<svg class="curve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="LLM별 누적 적중률">${grid}${xl}${lines}</svg>`;
-  $('legend').innerHTML = Object.entries(data).filter(([, r]) => r.length).map(([p, r]) => `<span class="lg"><i style="background:${PCOL[p]}"></i>${PROV[p] || p} <b class="num">${pct(r.at(-1)[1])}</b> <span class="num">(${r.at(-1)[2]})</span></span>`).join('');
+  svg.innerHTML = grid + lines;
+  pathLen(svg);
 }
-for (const hz of ['1h', 'close']) document.getElementById('cv-' + hz).onclick = () => { HZ = hz; document.getElementById('cv-1h').setAttribute('aria-pressed', hz === '1h'); document.getElementById('cv-close').setAttribute('aria-pressed', hz === 'close'); drawCurve(); };
+
+function renderFeed() {
+  const rows = D.predictions.filter((p) => ON[p.provider]).slice(0, 48);
+  $('feed').innerHTML = rows.length ? rows.map((p, i) => {
+    const cells = D.assets.map((a) => {
+      const pa = p.parsed?.assets?.[a.key], rs = p.result?.[a.key] || {};
+      const one = (pr, r) => { if (!pr) return '<span class="r na"></span>'; const cls = !r ? 'wait' : r.status ? 'na' : r.hit ? 'hit' : 'miss'; return `<span class="${pr.dir === 'up' ? 'up-t' : 'down-t'}">${pr.dir === 'up' ? '▲' : '▼'}</span><span class="r ${cls}">${cls === 'hit' ? '✓' : cls === 'miss' ? '✗' : ''}</span>`; };
+      return `<div class="mc"><span class="k">${NAMES[a.key]}</span><span class="p">${one(pa?.h1, rs['1h'])}${one(pa?.close, rs.close)}</span></div>`;
+    }).join('');
+    return `<div class="run" style="animation:rise .4s ease both;animation-delay:${Math.min(i, 10) * 40}ms">
+      <button class="hd" type="button"><span class="sw" style="background:${PC[p.provider]}"></span><b>${PROV[p.provider] || esc(p.provider)}</b><span class="vmeta">v${p.strategy_version ?? 1}</span>${p.parsed ? '' : `<span class="down-t">${p.failed === 'error' ? '응답 없음' : '형식 오류'}</span>`}<span class="t">${kst(p.at)}</span></button>
+      ${p.parsed ? `<div class="mini">${cells}</div>` : ''}
+      <div class="more">${p.parsed?.reason ? `<div>${esc(p.parsed.reason)}</div>` : ''}
+        <div class="tags">${(p.sources || []).map((x) => `<a class="tag" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label.replace(/^Article: /, '📰 '))}</a>`).join('')}</div>
+        <ul>${(p.headlines || []).map((h) => `<li>${esc(h.title)}</li>`).join('')}</ul></div></div>`;
+  }).join('') : '<div class="empty">–</div>';
+  $('feed').querySelectorAll('.run .hd').forEach((b) => { b.onclick = () => b.parentElement.classList.toggle('open'); });
+}
+
+let VSEL = null;
+function renderEvolution() {
+  const nodes = [...D.strategies.map((s) => ({ ...s, kind: 'v', at: s.created_at })), ...(D.evolutions || []).filter((e) => !e.adopted).map((e) => ({ ...e, kind: 'r' }))]
+    .sort((a, b) => new Date(a.at) - new Date(b.at));
+  if (VSEL == null) VSEL = D.strategies[0]?.version;
+  $('vline').innerHTML = nodes.map((n, i) => `${i ? '<span class="vgap"></span>' : ''}<button type="button" class="vnode ${n.kind === 'r' ? 'rej' : ''}" ${n.kind === 'v' ? `data-v="${n.version}" aria-pressed="${n.version === VSEL}"` : `title="${esc(n.why || '')}" disabled`}>${n.kind === 'v' ? 'v' + n.version : '·'}</button>`).join('');
+  $('vline').querySelectorAll('.vnode[data-v]').forEach((b) => { b.onclick = () => { VSEL = +b.dataset.v; renderEvolution(); }; });
+  const s = D.strategies.find((x) => x.version === VSEL) || D.strategies[0];
+  if (!s) return;
+  $('vbody').innerHTML = `<div class="vbody" key="${s.version}"><div class="vmeta">${kst(s.created_at)} · ${s.author === 'seed' ? '초기값' : PROV[s.author] || esc(s.author)}${s.changelog && s.author !== 'seed' ? ' — ' + esc(s.changelog) : ''}</div>
+    <blockquote>${esc(s.guidance)}</blockquote>
+    <div class="tags">${s.sources.map((x) => `<a class="tag" href="${esc(x.url)}" target="_blank" rel="noopener">🌐 ${esc(x.label)}</a>`).join('')}${s.queries.map((q) => `<span class="tag">🔎 ${esc(q)}</span>`).join('')}</div></div>`;
+  $('vline').scrollLeft = $('vline').scrollWidth;
+}
+
+function renderCollected() {
+  const c = D.collected;
+  if (!c) { $('tiles').innerHTML = '<div class="empty">–</div>'; return; }
+  $('c-at').textContent = kst(c.at);
+  const kv = [['VIX', c.vix, null], ...Object.entries(c.cross || {}).map(([k, v]) => [k, v.last, v.chg_pct])];
+  $('tiles').innerHTML = kv.map(([k, v, ch]) => `<div class="tile"><span class="k">${esc(k)}</span><span class="v num" data-to="${v}">0</span>${ch == null ? '' : `<span class="num ${ch >= 0 ? 'up-t' : 'down-t'}" style="font-size:12px">${ch >= 0 ? '+' : ''}${ch}%</span>`}</div>`).join('');
+  $('tiles').querySelectorAll('.v[data-to]').forEach((el) => { const to = +el.dataset.to; countUp(el, to, (x) => x.toLocaleString('en-US', { maximumFractionDigits: to < 50 ? 2 : 1 })); });
+  const mxc = Math.max(1, ...(c.explored || []).map((e) => e.chars));
+  $('srcs').innerHTML = (c.explored || []).map((e) => `<div class="src"><a href="${esc(e.url)}" target="_blank" rel="noopener" title="${esc(e.excerpt)}">${e.kind === 'article' ? '📰' : '🌐'} ${esc(e.label.replace(/^Article: /, ''))}</a><span class="lenbar" title="${e.chars}자"><i data-w="${e.chars / mxc * 100}"></i></span></div>`).join('')
+    + (c.failed || []).map((f) => `<div class="src"><span class="down-t">✗ ${esc(f.label.replace(/^Article: /, ''))}</span><span class="vmeta">${esc(f.why)}</span></div>`).join('');
+  requestAnimationFrame(() => requestAnimationFrame(() => $('srcs').querySelectorAll('i[data-w]').forEach((i) => { i.style.width = i.dataset.w + '%'; })));
+}
+
+function renderLab() {
+  const C = [...(D.candidates || [])].sort((a, b) => (b.tries ? b.ok / b.tries : -1) - (a.tries ? a.ok / a.tries : -1));
+  const tried = C.filter((c) => c.tries).length;
+  $('lab-sub').textContent = `${tried}/${C.length}`;
+  const og = (o) => o === 'seed' ? '초기' : o?.startsWith('suggest:') ? (PROV[o.slice(8)] || '') + ' 추천' : o?.startsWith('evolve:') ? (PROV[o.slice(7)] || '') + ' 진화' : esc(o);
+  $('lab').innerHTML = C.map((c) => {
+    const r = c.tries ? c.ok / c.tries : 0, L = 2 * Math.PI * 15;
+    const col = !c.tries ? 'var(--wait)' : r >= .67 ? 'var(--up)' : r > 0 ? 'var(--k)' : 'var(--down)';
+    return `<a class="cand" href="${esc(c.url)}" target="_blank" rel="noopener"><svg class="ring" width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="none" stroke="var(--sunk)" stroke-width="5"/><circle class="fg" cx="20" cy="20" r="15" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${L}" stroke-dashoffset="${L}" data-off="${L * (1 - r)}" transform="rotate(-90 20 20)"/><text x="20" y="24" text-anchor="middle" style="font:600 10px 'IBM Plex Mono';fill:var(--ink)">${c.tries ? c.ok + '/' + c.tries : '–'}</text></svg>
+      <span><span class="nm">${esc(c.label)}</span><br><span class="og">${og(c.origin)}${c.avg_chars ? ' · ' + c.avg_chars + '자' : ''}</span></span></a>`;
+  }).join('');
+  requestAnimationFrame(() => requestAnimationFrame(() => $('lab').querySelectorAll('circle[data-off]').forEach((c) => c.setAttribute('stroke-dashoffset', c.dataset.off))));
+}
+
+function tickNext() {
+  const n = new Date(); const t = new Date(n); t.setUTCMinutes(7, 0, 0); if (t <= n) t.setUTCHours(t.getUTCHours() + 1);
+  const m = Math.floor((t - n) / 60000), s = Math.floor((t - n) / 1000) % 60;
+  $('next').querySelector('b').textContent = `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function renderAll() { renderTop(); renderCards(); renderFocus(); renderLLMs(); renderCurve(); renderFeed(); renderEvolution(); renderCollected(); renderLab(); $('gen').textContent = D.generated_at ? kst(D.generated_at) + ' KST' : ''; }
+
+for (const [id, set] of [['f-hz', (v) => { FHZ = v; renderFocus(); }], ['c-hz', (v) => { CHZ = v; renderCurve(); }]]) {
+  $(id).querySelectorAll('button').forEach((b) => { b.onclick = () => { $(id).querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b)); set(b.dataset.hz); }; });
+}
+$('theme').onclick = () => { const r = document.documentElement; const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; r.dataset.theme = dark ? 'light' : 'dark'; try { localStorage.setItem('theme', r.dataset.theme); } catch {} };
+try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (D) { renderFocus(); renderCurve(); } }, 150); });
 
 async function load() {
   try {
     const r = await fetch('data/latest.json?ts=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) throw new Error(r.status);
-    render(await r.json());
-  } catch (e) { $('notice').textContent = '데이터를 불러오지 못했습니다 (' + e.message + '). 첫 실행 전이거나 배포 중일 수 있습니다.'; }
+    const j = await r.json();
+    if (!j.generated_at) throw new Error('empty');
+    const changed = !D || D.generated_at !== j.generated_at;
+    D = j;
+    if (changed) renderAll(); else renderTop();
+  } catch (e) { $('live').innerHTML = '<span class="dot"></span>데이터 대기'; }
 }
-try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
-load();
-setInterval(load, 300000);
+load(); setInterval(load, 120000); tickNext(); setInterval(tickNext, 1000);
 </script>
 </body>
 </html>
