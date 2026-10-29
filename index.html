@@ -285,7 +285,7 @@ function spark(s) {
 const latestFor = () => D.predictions.find((p) => p.parsed);
 
 function renderTop() {
-  const fresh = Date.now() - new Date(D.generated_at) < 2.5 * 3600e3;
+  const fresh = Date.now() - new Date(D.generated_at) < 3.5 * 3600e3;
   $('live').innerHTML = `<span class="dot ${fresh ? 'live' : ''}"></span>갱신 <b>${rel(D.generated_at)}</b>`;
   countUp($('count').querySelector('b'), D.report?.predictions || 0, (v) => Math.round(v));
   const news = (D.news?.length ? D.news : (D.predictions[0]?.headlines || [])).slice(0, 24);
@@ -496,9 +496,9 @@ function renderLab() {
 }
 
 function tickNext() {
-  const n = new Date(); const t = new Date(n); t.setUTCMinutes(7, 0, 0); if (t <= n) t.setUTCHours(t.getUTCHours() + 1);
-  const m = Math.floor((t - n) / 60000), s = Math.floor((t - n) / 1000) % 60;
-  $('next').querySelector('b').textContent = `${m}:${String(s).padStart(2, '0')}`;
+  const n = new Date(); const t = new Date(n); t.setUTCMinutes(7, 0, 0); t.setUTCHours(t.getUTCHours() - (t.getUTCHours() % 2)); while (t <= n) t.setUTCHours(t.getUTCHours() + 2);
+  const h = Math.floor((t - n) / 3600000), m = Math.floor((t - n) / 60000) % 60, s = Math.floor((t - n) / 1000) % 60;
+  $('next').querySelector('b').textContent = `${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${String(s).padStart(2, '0')}`;
 }
 
 function renderAll() { renderTop(); renderCards(); renderFocus(); renderLLMs(); renderCurve(); renderFeed(); renderEvolution(); renderCollected(); renderScripts(); renderLab(); $('gen').textContent = D.generated_at ? kst(D.generated_at) + ' KST' : ''; }
