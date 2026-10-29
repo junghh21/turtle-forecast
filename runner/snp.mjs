@@ -366,7 +366,10 @@ const SCRIPT_API = [
   `lib = { mean, std, returns(arr) -> simple returns, sma(arr,n), ema(arr,n), zscore(arr) -> z of last value, corr(a,b), clamp(x,lo,hi), logistic(x) }`,
 ].join('\n');
 
-function buildPrompt(s, m, strategy, signals, scriptBoard) {
+const NO_FENCE = new Set((process.env.SNP_NO_FENCE || 'qwen').split(','));
+const inBlock = (p) => NO_FENCE.has(p) ? '' : ' inside a ```json code block';
+
+function buildPrompt(s, m, strategy, signals, scriptBoard, provider) {
   const et = etParts(new Date(m.at));
   const kst = tzParts(new Date(m.at), 'Asia/Seoul');
   const hm = (e) => `${String(Math.floor(e.hm / 60)).padStart(2, '0')}:${String(e.hm % 60).padStart(2, '0')}`;
@@ -397,9 +400,9 @@ function buildPrompt(s, m, strategy, signals, scriptBoard) {
   lines.push(`For EACH asset key (${ASSETS.map((a) => a.key).join(', ')}) predict:`);
   lines.push(`- "1h": will the 1h instrument be HIGHER or LOWER exactly 60 minutes from now than its last price shown?`);
   lines.push(`- "close": will the NEXT regular-session close of the daily symbol (the first close after the current time) be HIGHER or LOWER than the last close shown?`);
-  lines.push(``, `You can run code before answering. If you want to, reply with ONLY {"run_script":{"code":"<function body>"}} inside a \`\`\`json code block and you will receive its output in this chat, then give the prediction JSON. At most one script run.`);
+  lines.push(``, `You can run code before answering. If you want to, reply with ONLY {"run_script":{"code":"<function body>"}}${inBlock(provider)} and you will receive its output in this chat, then give the prediction JSON. At most one script run.`);
   lines.push(SCRIPT_API);
-  lines.push(``, `Final answer: reply with ONLY this JSON inside a single \`\`\`json code block (the block keeps characters like * intact), nothing else:`);
+  lines.push(``, `Final answer: reply with ONLY this JSON${NO_FENCE.has(provider) ? '' : ' inside a single ```json code block (the block keeps characters like * intact)'}, nothing else:`);
   lines.push(`{"spx":{"1h":{"dir":"up|down","p_up":0.00},"close":{"dir":"up|down","p_up":0.00}},"ndx":{...},"tlt":{...},"boil":{...},"kospi":{...},"reason":"one or two short sentences","suggest_source":{"label":"...","url":"https://..."},"new_script":{"id":"snake_case_name","description":"one sentence","code":"<function body returning {spx:{h1:p_up,close:p_up},...}>"}}`);
   lines.push(`p_up is your probability (0 to 1) that the price ends higher; dir must agree with p_up. suggest_source (optional): one public web page not listed above that would most improve these predictions. new_script (optional): a persistent signal script that will run every hour and be scored like you; propose one only if you believe it adds information the existing scripts lack.`);
   return lines.join('\n');
@@ -421,7 +424,7 @@ function ask(provider, prompt, { timeout_s = 240, chat_id } = {}) {
 
 function cooled(p, preds) {
   const mine = preds.filter((x) => x.provider === p).slice(-2);
-  return mine.length === 2 && mine.every((x) => x.error) && now.getTime() - new Date(mine[1].at).getTime() < 6 * 3600_000;
+  return mine.length === 2 && mine.every((x) => x.error) && now.getTime() - new Date(mine[1].at).getTime() < 24 * 3600_000;
 }
 
 function pickProvider(start, exclude = []) {
@@ -434,7 +437,7 @@ async function repairAsk(rec) {
   if (!rec.chat_id) return null;
   const t0 = Date.now();
   try {
-    const r = await ask(rec.provider, 'Your reply could not be parsed as JSON. Reply again with ONLY the complete prediction JSON in the format given earlier, inside a ```json code block.', { chat_id: rec.chat_id, timeout_s: 180 });
+    const r = await ask(rec.provider, 'Your reply could not be parsed as JSON. Reply again with ONLY the complete prediction JSON in the format given earlier' + inBlock(rec.provider) + '.', { chat_id: rec.chat_id, timeout_s: 180 });
     const p = parseAnswer(r.answer);
     rec.repair = { ok: !!p, ms: Date.now() - t0, answer: String(r.answer).slice(0, 4000) };
     return p;
@@ -452,7 +455,7 @@ function jsonIn(t) {
 }
 
 function firstJson(text) {
-  const t = String(text);
+  const t = String(text).replace(/\u00a0/g, ' ').replace(/^[ \t]*\d+[ \t]*$/gm, '');
   for (const s of [...[...t.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((x) => x[1]), t]) { const j = jsonIn(s); if (j) return j; }
   return null;
 }
@@ -522,7 +525,7 @@ function reparse() {
   let n = 0;
   for (const p of preds) {
     if (p.parsed || p.error || !p.answer) continue;
-    const q = parseAnswer(p.answer);
+    const q = parseAnswer(p.answer) || (p.repair?.answer ? parseAnswer(p.repair.answer) : null);
     if (q) { delete q.new_script; delete q.suggest_source; p.parsed = q; p.reparsed_at = now.toISOString(); n++; }
   }
   if (n) fs.writeFileSync(P('preds.jsonl'), preds.map((p) => JSON.stringify(p)).join('\n') + '\n');
@@ -735,7 +738,7 @@ async function runPhases() {
     const snap = snapshot(m);
     const rec = { id: `${now.toISOString().replace(/[:.]/g, '')}-${ph.provider}`, at: m.at, provider: ph.provider, strategy_version: strategy.version, snapshot: snap, signals, script_errors };
     if (!Object.values(snap.assets).some((x) => x.last)) { log('no market snapshot, skip ask'); exportPublic(report(), m); clearWork(); return 0; }
-    const prompt = buildPrompt(snap, m, strategy, signals, readJson('report.json', {}).scripts || {});
+    const prompt = buildPrompt(snap, m, strategy, signals, readJson('report.json', {}).scripts || {}, ph.provider);
     rec.prompt_chars = prompt.length;
     const t0 = Date.now();
     try {
@@ -773,7 +776,7 @@ async function runPhases() {
     const out = r0.ok ? JSON.stringify(r0.result).slice(0, 6000) : `ERROR: ${r0.error}`;
     const t0 = Date.now();
     try {
-      const r = await ask(ph.provider, `Script output:\n${out}\n\nNow reply with ONLY the final prediction JSON in the format given earlier, inside a \`\`\`json code block (no further script runs).`, { chat_id: rec.chat_id });
+      const r = await ask(ph.provider, `Script output:\n${out}\n\nNow reply with ONLY the final prediction JSON in the format given earlier${inBlock(ph.provider)} (no further script runs).`, { chat_id: rec.chat_id });
       rec.ms += Date.now() - t0;
       rec.answer = String(r.answer).slice(0, 4000);
       rec.parsed = parseAnswer(r.answer) || await repairAsk(rec);
