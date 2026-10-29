@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>거북이 예보</title>
 <meta name="description" content="LLM 다섯 곳의 S&P 500·나스닥·TLT·BOIL·KOSPI 시간별 방향 예측과 적중 기록">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0B6E99">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
@@ -518,5 +522,6 @@ async function load() {
 }
 load(); setInterval(load, 120000); tickNext(); setInterval(tickNext, 1000);
 </script>
+<script>if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));</script>
 </body>
 </html>
