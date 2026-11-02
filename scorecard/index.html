@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>거북이 예보 성적표</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-container">
+      <div class="title-row">
+        <h1 class="app-title">🐢 거북이 예보 성적표</h1>
+        <span class="badge-provisional">사전등록 판정 전 · 중간 집계</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-item">집계 기준: <span id="feed-updated">로딩 중...</span></span>
+        <span class="meta-divider">•</span>
+        <span class="meta-item">전체 판정 예측: <span id="total-predictions">-</span>건</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="error-box" class="error-box hidden">
+    <div class="error-icon">⚠️</div>
+    <div class="error-content">
+      <h3>데이터를 불러오지 못했습니다</h3>
+      <p>성적표 데이터(scores.json)를 가져오는 데 실패했습니다. 네트워크 상태를 확인하시거나 잠시 후 다시 시도해 주세요.</p>
+      <button id="btn-retry" class="btn-retry">다시 시도</button>
+    </div>
+  </div>
+
+  <main class="main-content" id="main-content">
+    <!-- Filters -->
+    <section class="filters-section" aria-label="필터 옵션">
+      <div class="filter-group">
+        <label class="filter-label">자산</label>
+        <div class="filter-pills" id="asset-filters">
+          <button class="pill active" data-filter="asset" data-value="all">전체</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">예측 기간</label>
+        <div class="filter-pills" id="horizon-filters">
+          <button class="pill active" data-filter="horizon" data-value="all">전체</button>
+          <button class="pill" data-filter="horizon" data-value="1h">1시간</button>
+          <button class="pill" data-filter="horizon" data-value="close">다음 종가</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label">예보자 종류</label>
+        <div class="filter-pills" id="kind-filters">
+          <button class="pill active" data-filter="kind" data-value="all">전체</button>
+          <button class="pill" data-filter="kind" data-value="llm">LLM</button>
+          <button class="pill" data-filter="kind" data-value="script">스크립트</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1. Forecaster Rankings -->
+    <section class="card section-rankings">
+      <div class="section-header">
+        <div class="section-title-wrap">
+          <h2>🏆 예보자 순위</h2>
+          <span class="badge-sample-count" id="ranking-distinct-targets">독립 결과 -개</span>
+        </div>
+        <span class="section-sub">행을 클릭하면 상세 성적, 교정 곡선 및 최근 예측 내역을 확인할 수 있습니다.</span>
+      </div>
+      <div class="table-container">
+        <table class="score-table" id="ranking-table">
+          <thead>
+            <tr>
+              <th class="col-rank">순위</th>
+              <th class="col-name">이름</th>
+              <th class="col-kind">종류</th>
+              <th class="col-num">예측 수 n</th>
+              <th class="col-num">독립 결과</th>
+              <th class="col-num">적중률</th>
+              <th class="col-num">모멘텀 기준</th>
+              <th class="col-num">차이</th>
+              <th class="col-num">Brier</th>
+              <th class="col-num">평균 수익</th>
+              <th class="col-num">누적 수익</th>
+              <th class="col-num">롱 전용 평균</th>
+            </tr>
+          </thead>
+          <tbody id="ranking-tbody">
+            <tr><td colspan="12" class="empty-cell">데이터를 불러오는 중입니다...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-caption-note">수익 = 예측 시점 가격 진입 → 목표 시점 청산, 상승 예측은 매수·하락 예측은 매도, 비용 차감 전, 1회당 bp</p>
+    </section>
+
+    <!-- 2. Heatmap -->
+    <section class="card section-heatmap">
+      <div class="section-header">
+        <h2>🗺️ 자산별 적중률</h2>
+        <span class="section-sub">50% 기준 (±25%p 발색). 셀: 적중률 및 표본 수 n (n=0인 셀은 빈 칸 표시)</span>
+      </div>
+      <div class="heatmap-container" id="heatmap-container">
+        <div class="empty-cell">히트맵 로딩 중...</div>
+      </div>
+    </section>
+
+    <!-- 3. Trend Line Chart -->
+    <section class="card section-chart">
+      <div class="chart-header-row">
+        <div>
+          <h2>📈 누적 추이</h2>
+          <span class="section-sub">LLM 개별 추이 및 스크립트 평균 비교</span>
+        </div>
+        <div class="chart-toggle-group">
+          <button class="toggle-btn active" id="toggle-hit" data-metric="hit">적중률</button>
+          <button class="toggle-btn" id="toggle-ret" data-metric="ret">누적 수익</button>
+        </div>
+      </div>
+      <div class="chart-wrapper">
+        <div id="chart-svg-container" class="chart-svg-container"></div>
+        <div id="chart-tooltip" class="chart-tooltip hidden"></div>
+      </div>
+      <div id="chart-legend" class="chart-legend"></div>
+    </section>
+  </main>
+
+  <!-- Detail Modal -->
+  <div id="detail-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div>
+          <div class="modal-tags">
+            <span id="detail-kind-badge" class="kind-tag llm">LLM</span>
+            <span id="detail-sample-badge" class="badge-insufficient hidden">표본 부족</span>
+          </div>
+          <h2 id="detail-title" class="modal-title">예보자 상세</h2>
+        </div>
+        <button id="btn-close-modal" class="btn-close" aria-label="닫기">✕</button>
+      </div>
+      <div class="modal-body" id="detail-body">
+        <!-- Dynamic detail content -->
+      </div>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    <div class="footer-container">
+      <div class="footer-section">
+        <h3>📌 알림 (Note)</h3>
+        <p id="footer-note">-</p>
+      </div>
+      <div class="footer-section">
+        <h3>⚖️ 판정 규칙 (Verdict Rule)</h3>
+        <div id="footer-verdict-rule" class="verdict-content">-</div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
