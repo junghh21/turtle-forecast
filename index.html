@@ -318,12 +318,14 @@ function renderFocus() {
   const W = svg.clientWidth || 800, H = 300, L = 8, R = 62, T = 14, B = 24;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   if (s.length < 2) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">–</text>`; renderBoard(); return; }
-  const marks = D.predictions.filter((p) => p.parsed?.assets?.[SEL]?.[FHZ] && ON[p.provider]).map((p) => {
-    const t = new Date(p.at) / 1000, px = p.assets?.[SEL]?.last?.price;
-    return { p, t, px, pr: p.parsed.assets[SEL][FHZ], res: p.result?.[SEL]?.[FHZ] };
+  const PK = FHZ === '1h' ? 'h1' : 'close';
+  const marks = D.predictions.filter((p) => p.parsed?.assets?.[SEL]?.[PK] && ON[p.provider]).map((p) => {
+    const t = new Date(p.at) / 1000, px = FHZ === '1h' ? p.assets?.[SEL]?.last?.price : p.assets?.[SEL]?.ref?.close, pr = p.parsed.assets[SEL][PK];
+    const ca = p.assets?.[SEL]?.close_at, tt = FHZ === '1h' ? t + 3600 : ca ? new Date(ca) / 1000 : null;
+    return { p, t, px, pr, tt, tp: pr.price ?? null, res: p.result?.[SEL]?.[FHZ] };
   }).filter((m) => m.px != null && m.t >= s[0][0]);
-  const xs = s.map((d) => d[0]), ys = [...s.map((d) => d[1]), ...marks.map((m) => m.px)];
-  const x0 = xs[0], x1 = Math.max(xs.at(-1), ...marks.map((m) => m.t)), y0 = Math.min(...ys), y1 = Math.max(...ys), pad = (y1 - y0) * .08 || 1;
+  const xs = s.map((d) => d[0]), ys = [...s.map((d) => d[1]), ...marks.map((m) => m.px), ...marks.filter((m) => m.tp != null && m.tt != null).map((m) => m.tp)];
+  const x0 = xs[0], x1 = Math.max(xs.at(-1), ...marks.map((m) => m.t), ...marks.filter((m) => m.tp != null && m.tt != null).map((m) => m.tt)), y0 = Math.min(...ys), y1 = Math.max(...ys), pad = (y1 - y0) * .08 || 1;
   const X = (t) => L + (t - x0) / ((x1 - x0) || 1) * (W - L - R), Y = (y) => T + (1 - (y - (y0 - pad)) / ((y1 - y0) + 2 * pad)) * (H - T - B);
   const d = s.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
   const ticks = [0, .25, .5, .75, 1].map((k) => { const v = y0 - pad + k * ((y1 - y0) + 2 * pad); return `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${W - R + 6}" y="${Y(v) + 4}">${fmtPx(v)}</text>`; }).join('');
@@ -333,8 +335,9 @@ function renderFocus() {
     const x = X(m.t), y = Y(m.px), up = m.pr.dir === 'up';
     const ring = !m.res ? 'var(--wait)' : m.res.status ? 'var(--wait)' : m.res.hit ? 'var(--up)' : 'var(--down)';
     const c = PC[m.p.provider];
-    const xe = X(Math.min(x1, FHZ === '1h' ? m.t + 3600 : x1)), ye = y + (up ? -1 : 1) * (6 + 22 * Math.abs(m.pr.p_up - .5) * 2);
-    const tri = up ? `M${xe},${ye - 5} l4,7 h-8z` : `M${xe},${ye + 5} l4,-7 h-8z`;
+    const priced = m.tp != null && m.tt != null;
+    const xe = priced ? X(m.tt) : X(Math.min(x1, FHZ === '1h' ? m.t + 3600 : x1)), ye = priced ? Y(m.tp) : y + (up ? -1 : 1) * (6 + 22 * Math.abs(m.pr.p_up - .5) * 2);
+    const tri = (priced ? m.tp >= m.px : up) ? `M${xe},${ye - 5} l4,7 h-8z` : `M${xe},${ye + 5} l4,-7 h-8z`;
     return `<g class="mk" data-i="${i}" style="transform-origin:${x}px ${y}px"><line x1="${x}" y1="${y}" x2="${xe}" y2="${ye}" stroke="${c}" stroke-width="1.8" stroke-dasharray="4 3" opacity=".9"/><path d="${tri}" fill="${c}"/><circle cx="${x}" cy="${y}" r="4.5" fill="${c}" stroke="${ring}" stroke-width="2"/></g>`;
   }).join('');
   const col = s.at(-1)[1] >= s[0][1] ? 'var(--up)' : 'var(--down)';
@@ -352,7 +355,7 @@ function renderFocus() {
     if (g) {
       const m = marks[+g.dataset.i];
       const res = !m.res ? '채점 대기' : m.res.status ? '채점 안 함' : m.res.hit ? '✓ 적중' : '✗ 빗나감';
-      tip.innerHTML = `<b style="color:${PC[m.p.provider]}">${PROV[m.p.provider]}</b> · ${kst(m.p.at)}<br>${m.pr.dir === 'up' ? '▲ 상승' : '▼ 하락'} ${pct(m.pr.p_up)} · 기준가 ${fmtPx(m.px)} · <b>${res}</b>${m.p.parsed.reason ? `<br><span style="opacity:.8">${esc(m.p.parsed.reason)}</span>` : ''}`;
+      tip.innerHTML = `<b style="color:${PC[m.p.provider]}">${PROV[m.p.provider]}</b> · ${kst(m.p.at)}<br>${m.pr.dir === 'up' ? '▲ 상승' : '▼ 하락'} ${pct(m.pr.p_up)} · 기준가 ${fmtPx(m.px)}${m.tp != null ? ` · 예측가 <b>${fmtPx(m.tp)}</b>` : ''} · <b>${res}</b>${m.p.parsed.reason ? `<br><span style="opacity:.8">${esc(m.p.parsed.reason)}</span>` : ''}`;
     } else {
       let best = s[0]; for (const p of s) if (Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
       tip.innerHTML = `<b class="num">${fmtPx(best[1])}</b><br>${kst(new Date(best[0] * 1000).toISOString())}`;
