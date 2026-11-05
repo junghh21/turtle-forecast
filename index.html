@@ -320,9 +320,14 @@ function renderFocus() {
   if (s.length < 2) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">–</text>`; renderBoard(); return; }
   const PK = FHZ === '1h' ? 'h1' : 'close';
   const marks = D.predictions.filter((p) => p.parsed?.assets?.[SEL]?.[PK] && ON[p.provider]).map((p) => {
-    const t = new Date(p.at) / 1000, px = FHZ === '1h' ? p.assets?.[SEL]?.last?.price : p.assets?.[SEL]?.ref?.close, pr = p.parsed.assets[SEL][PK];
+    const t = new Date(p.at) / 1000, last = p.assets?.[SEL]?.last?.price, rc = p.assets?.[SEL]?.ref?.close, pr = p.parsed.assets[SEL][PK];
     const ca = p.assets?.[SEL]?.close_at, tt = FHZ === '1h' ? t + 3600 : ca ? new Date(ca) / 1000 : null;
-    return { p, t, px, pr, tt, tp: pr.price ?? null, res: p.result?.[SEL]?.[FHZ] };
+    // The close forecast is scored against the daily index close (rc), while the line is the futures/intraday price (last), which can sit 5-12% apart (Nasdaq: NQ futures vs the Composite).
+    // Plot on the line's own scale: start from the price at prediction time and carry a predicted close over by its ratio to the reference close. A predicted price that matches neither scale is not drawn.
+    const near = (v, b) => v != null && b != null && b !== 0 && Math.abs(v / b - 1) < .06;
+    let px = last, tp = pr.price ?? null;
+    if (FHZ !== '1h') { px = last ?? rc; tp = tp == null ? null : near(tp, last) ? tp : (near(tp, rc) && last != null ? last * tp / rc : null); }
+    return { p, t, px, pr, tt, tp, pxd: FHZ === '1h' ? last : rc, tpd: pr.price ?? null, res: p.result?.[SEL]?.[FHZ] };
   }).filter((m) => m.px != null && m.t >= s[0][0]);
   const xs = s.map((d) => d[0]), ys = [...s.map((d) => d[1]), ...marks.map((m) => m.px), ...marks.filter((m) => m.tp != null && m.tt != null).map((m) => m.tp)];
   const x0 = xs[0], x1 = Math.max(xs.at(-1), ...marks.map((m) => m.t), ...marks.filter((m) => m.tp != null && m.tt != null).map((m) => m.tt)), y0 = Math.min(...ys), y1 = Math.max(...ys), pad = (y1 - y0) * .08 || 1;
@@ -355,7 +360,7 @@ function renderFocus() {
     if (g) {
       const m = marks[+g.dataset.i];
       const res = !m.res ? '채점 대기' : m.res.status ? '채점 안 함' : m.res.hit ? '✓ 적중' : '✗ 빗나감';
-      tip.innerHTML = `<b style="color:${PC[m.p.provider]}">${PROV[m.p.provider]}</b> · ${kst(m.p.at)}<br>${m.pr.dir === 'up' ? '▲ 상승' : '▼ 하락'} ${pct(m.pr.p_up)} · 기준가 ${fmtPx(m.px)}${m.tp != null ? ` · 예측가 <b>${fmtPx(m.tp)}</b>` : ''} · <b>${res}</b>${m.p.parsed.reason ? `<br><span style="opacity:.8">${esc(m.p.parsed.reason)}</span>` : ''}`;
+      tip.innerHTML = `<b style="color:${PC[m.p.provider]}">${PROV[m.p.provider]}</b> · ${kst(m.p.at)}<br>${m.pr.dir === 'up' ? '▲ 상승' : '▼ 하락'} ${pct(m.pr.p_up)} · ${FHZ === '1h' ? '기준가' : '전일 종가'} ${fmtPx(m.pxd)}${m.tpd != null ? ` · 예측가 <b>${fmtPx(m.tpd)}</b>` : ''} · <b>${res}</b>${m.p.parsed.reason ? `<br><span style="opacity:.8">${esc(m.p.parsed.reason)}</span>` : ''}`;
     } else {
       let best = s[0]; for (const p of s) if (Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
       tip.innerHTML = `<b class="num">${fmtPx(best[1])}</b><br>${kst(new Date(best[0] * 1000).toISOString())}`;
