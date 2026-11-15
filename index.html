@@ -17,21 +17,21 @@
   --bg:#EEF2F5; --surface:#FFFFFF; --sunk:#E6EBEF; --ink:#0D1922; --muted:#5D6D7A; --line:#D7DFE6;
   --accent:#0B6E99; --accent-soft:#DDEFF7; --up:#0E8A5D; --up-soft:#DDF3E9; --down:#CF3D33; --down-soft:#FBE5E3; --wait:#8C99A4;
   --shadow:0 1px 2px rgba(13,25,34,.05),0 8px 24px rgba(13,25,34,.06);
-  --g:#3B82C4; --q:#7A5AF8; --d:#0F9488; --k:#D97706; --x:#DB2777;
+  --g:#3B82C4; --q:#7A5AF8; --d:#0F9488; --k:#D97706; --x:#DB2777; --a:#6F9A1E; --c:#5F6B80; --m:#9A5A1A;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0A1116; --surface:#111B22; --sunk:#0D161C; --ink:#E4EBF0; --muted:#8B9CA9; --line:#203039;
     --accent:#58B8E4; --accent-soft:#103042; --up:#3ECD8E; --up-soft:#0E2C21; --down:#FF6F62; --down-soft:#371815; --wait:#6C7C88;
     --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
-    --g:#6AA8E0; --q:#A08BFF; --d:#2DC4B4; --k:#F2A33A; --x:#F062A6;
+    --g:#6AA8E0; --q:#A08BFF; --d:#2DC4B4; --k:#F2A33A; --x:#F062A6; --a:#9BCB3C; --c:#8E9AAF; --m:#C98A4B;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0A1116; --surface:#111B22; --sunk:#0D161C; --ink:#E4EBF0; --muted:#8B9CA9; --line:#203039;
   --accent:#58B8E4; --accent-soft:#103042; --up:#3ECD8E; --up-soft:#0E2C21; --down:#FF6F62; --down-soft:#371815; --wait:#6C7C88;
   --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
-  --g:#6AA8E0; --q:#A08BFF; --d:#2DC4B4; --k:#F2A33A; --x:#F062A6;
+  --g:#6AA8E0; --q:#A08BFF; --d:#2DC4B4; --k:#F2A33A; --x:#F062A6; --a:#9BCB3C; --c:#8E9AAF; --m:#C98A4B;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding-inline:16px}
@@ -238,8 +238,8 @@ a.tag:hover{border-color:var(--accent);color:var(--accent)}
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const NAMES = { spx: 'S&P 500', ndx: '나스닥', tlt: 'TLT', boil: 'BOIL', kospi: 'KOSPI' };
-const PROV = { gemini: 'Gemini', qwen: 'Qwen', deepseek: 'DeepSeek', kimi: 'Kimi', grok: 'Grok' };
-const PC = { gemini: 'var(--g)', qwen: 'var(--q)', deepseek: 'var(--d)', kimi: 'var(--k)', grok: 'var(--x)' };
+const PROV = { gemini: 'Gemini', qwen: 'Qwen', deepseek: 'DeepSeek', kimi: 'Kimi', grok: 'Grok', aistudio: 'AI Studio', chatgpt: 'ChatGPT', gemma: 'Gemma' };
+const PC = { gemini: 'var(--g)', qwen: 'var(--q)', deepseek: 'var(--d)', kimi: 'var(--k)', grok: 'var(--x)', aistudio: 'var(--a)', chatgpt: 'var(--c)', gemma: 'var(--m)' };
 const pct = (x) => x == null ? '–' : Math.round(x * 100) + '%';
 const fmtPx = (x) => x == null ? '–' : x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 }) : x.toFixed(2);
 const kst = (iso) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
