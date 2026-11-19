@@ -124,6 +124,22 @@ button{font:inherit;color:inherit}
 .run.open .more{display:grid;gap:6px}
 .more a{color:var(--accent);text-decoration:none}
 .more ul{margin:0;padding-left:16px}
+.vlist{display:grid;gap:8px}
+.vitem{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:10px 12px;background:var(--surface);display:grid;gap:6px;font-size:13px;animation:rise .35s ease both}
+.vitem.rej{border-left:4px dashed var(--wait);padding:6px 12px;font-size:12px;color:var(--muted);gap:2px}
+.vitem.dec{border-left-color:var(--k)}
+.vhd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vpill{font:600 12px 'IBM Plex Mono',monospace;border:2px solid var(--accent);color:var(--accent);border-radius:999px;padding:0 10px;line-height:22px}
+.vpill.now{background:var(--accent);color:var(--surface)}
+.vitem.dec .vpill{border-color:var(--k);color:var(--k)}
+.vitem details summary{cursor:pointer;color:var(--accent);font-size:12.5px;padding:2px 0}
+.vitem blockquote{margin:6px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--sunk);border-radius:0 10px 10px 0;white-space:pre-wrap;font-size:12.5px}
+.pager{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+.pager button{min-width:32px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer;font:600 12px 'IBM Plex Mono',monospace}
+.pager button:hover:not(:disabled){border-color:var(--accent)}
+.pager button[aria-current="page"]{background:var(--accent);color:var(--surface);border-color:var(--accent)}
+.pager button:disabled{opacity:.35;cursor:default}
+.pager .info{color:var(--muted);font-size:12px;margin:0 8px}
 .vline{display:flex;align-items:center;gap:0;overflow-x:auto;padding:12px 4px 6px}
 .vnode{border:2px solid var(--accent);background:var(--surface);color:var(--accent);border-radius:999px;min-width:42px;height:28px;font:600 12px 'IBM Plex Mono',monospace;cursor:pointer;flex:none;transition:transform .2s,background .2s}
 .vnode:hover{transform:scale(1.08)}
@@ -215,7 +231,7 @@ a.tag:hover{border-color:var(--accent);color:var(--accent)}
       <div class="feed" id="feed"></div>
     </div>
     <div class="panel" style="display:grid;gap:14px;align-content:start">
-      <div><div class="ph"><h2>전략 진화</h2></div><div class="vline" id="vline"></div><div id="vbody"></div></div>
+      <div><div class="ph"><h2>전략 진화</h2><span class="vmeta" id="vcount"></span></div><div class="vlist" id="vbody"></div><nav class="pager" id="vpager" aria-label="전략 진화 페이지"></nav></div>
       <div><div class="ph"><h2>수집 데이터</h2><span class="vmeta" id="c-at"></span></div><div class="tiles" id="tiles"></div><div class="srcs" id="srcs"></div></div>
     </div>
   </div>
@@ -459,19 +475,64 @@ function renderScripts() {
   }));
 }
 
-let VSEL = null;
+let VPAGE = 1;
+const VPER = 5;
+function evoItems() {
+  const evs = D.evolutions || [];
+  const bySc = new Map(evs.filter((e) => e.adopted && e.version != null && !e.decision).map((e) => [e.version, e]));
+  const items = D.strategies.map((s) => ({ kind: 'v', at: s.created_at, s, ev: bySc.get(s.version) }));
+  for (const e of evs) {
+    if (e.adopted && e.version != null && !e.decision) continue;
+    items.push({ kind: e.decision ? 'd' : 'r', at: e.at, e });
+  }
+  items.sort((a, b) => new Date(b.at) - new Date(a.at));
+  const out = [];
+  for (const it of items) {
+    const prev = out[out.length - 1];
+    const key = it.kind === 'r' ? String(it.e.why || '').replace(/\d+/g, '#').slice(0, 60) : null;
+    if (it.kind === 'r' && prev && prev.kind === 'r' && prev.key === key) { prev.n += 1; prev.first = it.at; continue; }
+    out.push({ ...it, key, n: 1, first: it.at });
+  }
+  return out;
+}
+
+function pageList(cur, pages) {
+  if (pages <= 7) return Array.from({ length: pages }, (_, k) => k + 1);
+  const set = new Set([1, pages, cur - 1, cur, cur + 1]);
+  const arr = [...set].filter((x) => x >= 1 && x <= pages).sort((a, b) => a - b);
+  const out = [];
+  arr.forEach((x, k) => { if (k && x - arr[k - 1] > 1) out.push(0); out.push(x); });
+  return out;
+}
+
 function renderEvolution() {
-  const nodes = [...D.strategies.map((s) => ({ ...s, kind: 'v', at: s.created_at })), ...(D.evolutions || []).filter((e) => !e.adopted).map((e) => ({ ...e, kind: 'r' }))]
-    .sort((a, b) => new Date(a.at) - new Date(b.at));
-  if (VSEL == null) VSEL = D.strategies[0]?.version;
-  $('vline').innerHTML = nodes.map((n, i) => `${i ? '<span class="vgap"></span>' : ''}<button type="button" class="vnode ${n.kind === 'r' ? 'rej' : ''}" ${n.kind === 'v' ? `data-v="${n.version}" aria-pressed="${n.version === VSEL}"` : `title="${esc(n.why || '')}" disabled`}>${n.kind === 'v' ? 'v' + n.version : '·'}</button>`).join('');
-  $('vline').querySelectorAll('.vnode[data-v]').forEach((b) => { b.onclick = () => { VSEL = +b.dataset.v; renderEvolution(); }; });
-  const s = D.strategies.find((x) => x.version === VSEL) || D.strategies[0];
-  if (!s) return;
-  $('vbody').innerHTML = `<div class="vbody" key="${s.version}"><div class="vmeta">${kst(s.created_at)} · ${s.author === 'seed' ? '초기값' : PROV[s.author] || esc(s.author)}${s.changelog && s.author !== 'seed' ? ' — ' + esc(s.changelog) : ''}</div>
-    <blockquote>${esc(s.guidance)}</blockquote>
-    <div class="tags">${s.sources.map((x) => `<a class="tag" href="${esc(x.url)}" target="_blank" rel="noopener">🌐 ${esc(x.label)}</a>`).join('')}${s.queries.map((q) => `<span class="tag">🔎 ${esc(q)}</span>`).join('')}</div></div>`;
-  $('vline').scrollLeft = $('vline').scrollWidth;
+  const all = evoItems();
+  const pages = Math.max(1, Math.ceil(all.length / VPER));
+  VPAGE = Math.min(Math.max(1, VPAGE), pages);
+  const maxV = Math.max(0, ...D.strategies.map((s) => s.version));
+  const from = (VPAGE - 1) * VPER;
+  const rows = all.slice(from, from + VPER);
+  $('vcount').textContent = `v${maxV} · ${D.strategies.length}개 전략`;
+  $('vbody').innerHTML = rows.map((it) => {
+    if (it.kind === 'v') {
+      const s = it.s, sc = it.ev?.scripts || {};
+      const add = (sc.added || []).length, ret = (sc.retired || []).length;
+      return `<div class="vitem"><div class="vhd"><span class="vpill${s.version === maxV ? ' now' : ''}">v${s.version}</span><span class="vmeta">${kst(s.created_at)} · ${s.author === 'seed' ? '초기값' : PROV[s.author] || esc(s.author)}</span>${s.version === maxV ? '<span class="tag">현재</span>' : ''}${add || ret ? `<span class="tag" title="이 진화에서 추가/퇴출된 분석 스크립트">스크립트 +${add} −${ret}</span>` : ''}</div>
+        <div>${esc(s.changelog || '')}</div>
+        <details><summary>지침·소스 보기</summary><blockquote>${esc(s.guidance)}</blockquote>
+        <div class="tags">${(s.sources || []).map((x) => `<a class="tag" href="${esc(x.url)}" target="_blank" rel="noopener">🌐 ${esc(x.label)}</a>`).join('')}${(s.queries || []).map((q) => `<span class="tag">🔎 ${esc(q)}</span>`).join('')}</div></details></div>`;
+    }
+    if (it.kind === 'd') {
+      const e = it.e, roll = e.decision === 'rollback';
+      const txt = roll ? `도전자 v${e.from}(점수 ${e.challenger_score ?? '–'})가 챔피언만 못해 v${e.to} 내용으로 되돌림` : `v${e.version} 가 챔피언보다 낫다고 판정되어 승격(점수 ${e.score ?? '–'})`;
+      return `<div class="vitem dec"><div class="vhd"><span class="vpill">${roll ? '롤백' : '승격'}</span><span class="vmeta">${kst(e.at)}</span></div><div>${esc(txt)}</div></div>`;
+    }
+    const e = it.e;
+    return `<div class="vitem rej"><div class="vhd"><span class="vmeta">${kst(e.at)}${it.n > 1 ? ' ~ ' + kst(it.first) : ''}</span>${e.provider ? `<span class="vmeta">${PROV[e.provider] || esc(e.provider)}</span>` : ''}${it.n > 1 ? `<span class="tag">×${it.n}</span>` : ''}<span class="vmeta">채택 안 함</span></div><div title="${esc(String(e.why || ''))}">${esc(String(e.why || e.changelog || '').replace(/\s+/g, ' ').slice(0, 140))}</div></div>`;
+  }).join('') || '<div class="empty">–</div>';
+  const nums = pageList(VPAGE, pages).map((n) => n ? `<button type="button" data-p="${n}"${n === VPAGE ? ' aria-current="page"' : ''}>${n}</button>` : '<span class="info">…</span>').join('');
+  $('vpager').innerHTML = pages > 1 ? `<button type="button" data-p="${VPAGE - 1}" ${VPAGE === 1 ? 'disabled' : ''} aria-label="이전">‹</button>${nums}<button type="button" data-p="${VPAGE + 1}" ${VPAGE === pages ? 'disabled' : ''} aria-label="다음">›</button><span class="info">${from + 1}–${Math.min(from + VPER, all.length)} / ${all.length}</span>` : '';
+  $('vpager').querySelectorAll('button[data-p]').forEach((b) => { b.onclick = () => { VPAGE = +b.dataset.p; renderEvolution(); }; });
 }
 
 function renderCollected() {
