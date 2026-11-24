@@ -47,6 +47,7 @@ button{font:inherit;color:inherit}
 .pill b{color:var(--ink);font-weight:600}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--wait);position:relative}
 .dot.live{background:var(--up)}
+.dot.stale{background:var(--down)}
 .dot.live::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--up);animation:ping 1.8s ease-out infinite}
 @keyframes ping{from{transform:scale(.6);opacity:.9}to{transform:scale(1.8);opacity:0}}
 .iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;cursor:pointer;color:var(--muted)}
@@ -296,8 +297,10 @@ function spark(s) {
 const latestFor = () => D.predictions.find((p) => p.parsed);
 
 function renderTop() {
-  const fresh = Date.now() - new Date(D.generated_at) < 3.5 * 3600e3;
-  $('live').innerHTML = `<span class="dot ${fresh ? 'live' : ''}"></span>갱신 <b>${rel(D.generated_at)}</b>`;
+  const lp = D.last_pred_at || D.generated_at;
+  const fresh = Date.now() - new Date(lp) < 3.5 * 3600e3;
+  $('live').innerHTML = fresh ? `<span class="dot live"></span>갱신 <b>${rel(lp)}</b>` : `<span class="dot stale"></span>예측 멈춤 · 마지막 예측 <b>${rel(lp)}</b>`;
+  $('live').title = `마지막 예측 ${kst(lp)} · 화면 갱신 ${kst(D.generated_at)}`;
   countUp($('count').querySelector('b'), D.report?.predictions || 0, (v) => Math.round(v));
   const news = (D.news?.length ? D.news : (D.predictions[0]?.headlines || [])).slice(0, 24);
   const items = news.map((n) => `<a href="${esc(n.link || '#')}" target="_blank" rel="noopener"><span class="t">${kst(n.at)}</span>${esc(n.title)}</a>`).join('');
